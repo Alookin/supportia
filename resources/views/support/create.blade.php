@@ -36,13 +36,61 @@
 
                 {{-- Client --}}
                 <div class="mb-4">
-                    <label class="block text-sm font-semibold text-gray-600 mb-1">Client</label>
-                    <input type="text"
-                           x-model="clientName"
-                           placeholder="Nom du client (optionnel)"
-                           class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm
-                                  focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                                  outline-none transition-colors" />
+                    <label class="flex items-center gap-2 cursor-pointer select-none mb-3">
+                        <input type="checkbox"
+                               x-model="isSpecificClient"
+                               class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                        <span class="text-sm font-semibold text-gray-700">Ce problème concerne un client spécifique</span>
+                    </label>
+
+                    {{-- Champs clients dynamiques --}}
+                    <div x-show="isSpecificClient" x-transition>
+                        <template x-for="(client, index) in clients" :key="index">
+                            <div class="flex items-center gap-2 mb-2">
+                                <input type="text"
+                                       x-model="client.id"
+                                       placeholder="ID client *"
+                                       class="w-28 px-3 py-2 border border-gray-200 rounded-lg text-sm
+                                              focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                                              outline-none transition-colors"
+                                       :class="client.id.trim() === '' && clients.length === 1 ? 'border-amber-300' : ''">
+                                <input type="text"
+                                       x-model="client.name"
+                                       placeholder="Nom du client"
+                                       class="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm
+                                              focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                                              outline-none transition-colors">
+                                <button type="button"
+                                        x-show="clients.length > 1"
+                                        @click="removeClient(index)"
+                                        class="shrink-0 text-gray-300 hover:text-red-400 transition-colors p-1">
+                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </template>
+                        <button type="button"
+                                x-show="clients.length < 10"
+                                @click="addClient()"
+                                class="mt-1 text-xs font-semibold text-blue-600 hover:text-blue-800
+                                       flex items-center gap-1 transition-colors">
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                            Ajouter un autre client
+                        </button>
+                    </div>
+
+                    {{-- Contexte libre si pas de client spécifique --}}
+                    <div x-show="!isSpecificClient" x-transition>
+                        <textarea x-model="context"
+                                  rows="2"
+                                  placeholder="Contexte (optionnel) : interne, tous les clients, autre..."
+                                  class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm
+                                         focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                                         outline-none transition-colors resize-none"></textarea>
+                    </div>
                 </div>
 
                 {{-- Description --}}
@@ -116,9 +164,9 @@
 
                 {{-- Bouton --}}
                 <button @click="submit()"
-                        :disabled="description.trim().length < 10"
+                        :disabled="!canSubmit"
                         class="w-full py-3 rounded-lg font-bold text-white transition-all text-sm"
-                        :class="description.trim().length >= 10
+                        :class="canSubmit
                             ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer active:scale-[0.98]'
                             : 'bg-gray-300 cursor-not-allowed'">
                     Envoyer au support
@@ -309,10 +357,11 @@
                               x-text="priorityEmoji(createdData.priority) + ' '
                                       + priorityLabel(createdData.priority)"></span>
                     </div>
-                    <template x-if="clientName">
+                    <template x-if="isSpecificClient && clients.filter(c => c.id.trim()).length > 0">
                         <div class="flex justify-between">
-                            <span class="text-gray-500">Client</span>
-                            <span class="font-semibold" x-text="clientName"></span>
+                            <span class="text-gray-500 shrink-0">Client(s)</span>
+                            <span class="font-semibold text-right"
+                                  x-text="clients.filter(c => c.id.trim()).map(c => c.id + (c.name ? ' ' + c.name : '')).join(', ')"></span>
                         </div>
                     </template>
                 </div>
@@ -370,7 +419,9 @@ function supportForm() {
 
         // Inputs
         description: '',
-        clientName: '',
+        isSpecificClient: true,
+        clients: [{ id: '', name: '' }],
+        context: '',
         screenshot: null,
         screenshotPreview: null,
         error: null,
@@ -392,7 +443,22 @@ function supportForm() {
         init() {
             const params = new URLSearchParams(window.location.search);
             if (params.get('description')) this.description = params.get('description');
-            if (params.get('client_name')) this.clientName  = params.get('client_name');
+            if (params.get('client_name')) this.clients[0].name = params.get('client_name');
+        },
+
+        // ─── Gestion des clients ─────────────────────────────────
+        addClient() {
+            if (this.clients.length < 10) this.clients.push({ id: '', name: '' });
+        },
+
+        removeClient(index) {
+            this.clients.splice(index, 1);
+        },
+
+        get canSubmit() {
+            if (this.description.trim().length < 10) return false;
+            if (this.isSpecificClient) return this.clients.some(c => c.id.trim() !== '');
+            return true;
         },
 
         // ─── Actions ────────────────────────
@@ -415,18 +481,28 @@ function supportForm() {
         },
 
         async submit() {
-            if (this.description.trim().length < 10) {
-                this.error = 'Décrivez le problème en au moins 10 caractères.';
-                return;
-            }
+            if (!this.canSubmit) return;
             this.error = null;
             this.state = 'loading';
             const start = Date.now();
 
             try {
                 const formData = new FormData();
-                formData.append('description', this.description);
-                if (this.clientName) formData.append('client_name', this.clientName);
+
+                // Description + contexte libre si pas de client spécifique
+                let description = this.description;
+                if (!this.isSpecificClient && this.context.trim()) {
+                    description += '\n\nContexte : ' + this.context.trim();
+                }
+                formData.append('description', description);
+
+                // Clients
+                formData.append('is_specific_client', this.isSpecificClient ? '1' : '0');
+                if (this.isSpecificClient) {
+                    const validClients = this.clients.filter(c => c.id.trim() !== '');
+                    formData.append('clients', JSON.stringify(validClients));
+                }
+
                 if (this.screenshot) formData.append('screenshot', this.screenshot);
 
                 const resp = await fetch('/support/tickets', {
@@ -523,7 +599,9 @@ function supportForm() {
         reset() {
             this.state = 'form';
             this.description = '';
-            this.clientName = '';
+            this.isSpecificClient = true;
+            this.clients = [{ id: '', name: '' }];
+            this.context = '';
             this.screenshot = null;
             this.screenshotPreview = null;
             this.error = null;

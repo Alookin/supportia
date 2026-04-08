@@ -14,6 +14,7 @@ class SupportTicket extends Model
         'user_id',
         'client_identifier',
         'client_name',
+        'client_ids',
         'raw_description',
         'screenshot_path',
         'ai_title',
@@ -32,6 +33,7 @@ class SupportTicket extends Model
     ];
 
     protected $casts = [
+        'client_ids'           => 'array',
         'ai_priority'          => 'integer',
         'ai_confidence'        => 'float',
         'glpi_ticket_id'       => 'integer',

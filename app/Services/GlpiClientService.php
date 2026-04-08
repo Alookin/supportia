@@ -28,12 +28,21 @@ class GlpiClientService
         $sessionToken = $this->getSessionToken($organization);
 
         // Résoudre le slug vers l'ID GLPI
+        $categorySlug = $ticketData['category_slug'] ?? 'autre';
         $category = GlpiCategoryMap::where('organization_id', $organization->id)
-            ->where('slug', $ticketData['category_slug'] ?? 'autre')
+            ->where('slug', $categorySlug)
             ->first();
 
         $glpiCategoryId = $category?->glpi_category_id ?? 0;
-        $glpiEntityId = $category?->glpi_entity_id ?? 0;
+        $glpiEntityId   = $category?->glpi_entity_id   ?? 0;
+
+        Log::debug('[GLPI] Résolution catégorie', [
+            'organization_id'  => $organization->id,
+            'category_slug'    => $categorySlug,
+            'category_found'   => $category !== null,
+            'glpi_category_id' => $glpiCategoryId,
+            'glpi_entity_id'   => $glpiEntityId,
+        ]);
 
         $payload = [
             'input' => [
@@ -47,6 +56,8 @@ class GlpiClientService
                 'impact'            => min($ticketData['priority'] ?? 3, 4),
             ],
         ];
+
+        Log::debug('[GLPI] Payload envoyé à /Ticket', $payload);
 
         $response = $this->http()->withHeaders($this->headers($organization, $sessionToken))
             ->post($this->url($organization, '/Ticket'), $payload);

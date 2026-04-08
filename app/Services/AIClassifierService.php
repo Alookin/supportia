@@ -73,7 +73,7 @@ class AIClassifierService
             ->implode("\n");
 
         $clientContext = $clientName
-            ? "Client concerné : {$clientName}"
+            ? "Clients concernés : {$clientName}"
             : 'Client non spécifié';
 
         return <<<PROMPT

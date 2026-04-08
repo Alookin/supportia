@@ -26,10 +26,17 @@ class SupportTicketController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'description'       => 'required|string|min:10|max:5000',
-            'client_identifier' => 'nullable|string|max:100',
-            'client_name'       => 'nullable|string|max:255',
-            'screenshot'        => 'nullable|image|max:5120', // 5 MB
+            'description'        => 'required|string|min:10|max:5000',
+            'is_specific_client' => 'nullable|in:0,1',
+            'clients'            => ['nullable', 'string', function ($attr, $value, $fail) use ($request) {
+                if ($request->input('is_specific_client') == '1') {
+                    $arr = json_decode($value, true);
+                    if (! is_array($arr) || ! collect($arr)->contains(fn ($c) => ! empty(trim($c['id'] ?? '')))) {
+                        $fail('Au moins un ID client est requis.');
+                    }
+                }
+            }],
+            'screenshot'         => 'nullable|image|max:5120', // 5 MB
         ]);
 
         $user = $request->user();
@@ -41,33 +48,49 @@ class SupportTicketController extends Controller
             ], 403);
         }
 
-        // 1. Stocker la capture d'écran si fournie
+        // 1. Parser les clients
+        $isSpecificClient = ($request->input('is_specific_client') == '1');
+        $clientIds = null;
+        $clientName = null;
+
+        if ($isSpecificClient) {
+            $raw = json_decode($request->input('clients', '[]'), true) ?: [];
+            $clientIds = collect($raw)
+                ->filter(fn ($c) => ! empty(trim($c['id'] ?? '')))
+                ->map(fn ($c) => ['id' => trim($c['id']), 'name' => trim($c['name'] ?? '')])
+                ->values()->all();
+            $clientName = collect($clientIds)
+                ->map(fn ($c) => $c['id'] . ($c['name'] ? ' ' . $c['name'] : ''))
+                ->implode(', ');
+        }
+
+        // 2. Stocker la capture d'écran si fournie
         $screenshotPath = null;
         if ($request->hasFile('screenshot')) {
             $screenshotPath = $request->file('screenshot')
                 ->store('screenshots', 'public');
         }
 
-        // 2. Créer le ticket local (traçabilité avant tout)
+        // 3. Créer le ticket local (traçabilité avant tout)
         $ticket = SupportTicket::create([
-            'organization_id'   => $organization->id,
-            'user_id'           => $user->id,
-            'client_identifier' => $validated['client_identifier'] ?? null,
-            'client_name'       => $validated['client_name'] ?: null,
-            'raw_description'   => $validated['description'],
-            'screenshot_path'   => $screenshotPath,
-            'status'            => 'pending',
+            'organization_id' => $organization->id,
+            'user_id'         => $user->id,
+            'client_ids'      => $clientIds,
+            'client_name'     => $clientName,
+            'raw_description' => $validated['description'],
+            'screenshot_path' => $screenshotPath,
+            'status'          => 'pending',
         ]);
 
-        // 2. Classification IA
+        // 4. Classification IA
         $classification = $this->classifier->classify(
             $organization,
             $validated['description'],
-            $validated['client_name'] ?? null,
+            $clientName,
             $ticket,
         );
 
-        // 3. Mettre à jour le ticket avec les résultats IA
+        // 5. Mettre à jour le ticket avec les résultats IA
         $ticket->update([
             'ai_title'         => $classification['title'],
             'ai_body'          => $classification['body'],
@@ -77,14 +100,14 @@ class SupportTicketController extends Controller
             'ai_provider'      => $classification['provider'],
         ]);
 
-        // 4. Si confiance suffisante → création directe dans GLPI
+        // 6. Si confiance suffisante → création directe dans GLPI
         $threshold = config('supportia.confidence_threshold', 0.7);
 
         if ($classification['confidence'] >= $threshold) {
             return $this->createInGlpi($organization, $ticket, $classification, $user);
         }
 
-        // 5. Confiance trop basse → retourner la suggestion pour validation
+        // 7. Confiance trop basse → retourner la suggestion pour validation
         return response()->json([
             'status'     => 'needs_review',
             'ticket_id'  => $ticket->id,

@@ -76,7 +76,15 @@
 
                     <div>
                         <dt class="text-xs font-semibold uppercase tracking-wider text-gray-400">Client</dt>
-                        <dd class="mt-1 text-sm text-gray-800">{{ $ticket->client_name ?: '—' }}</dd>
+                        @if($ticket->client_ids && count($ticket->client_ids) > 1)
+                            <dd class="mt-1 text-sm text-gray-800 space-y-0.5">
+                                @foreach($ticket->client_ids as $c)
+                                    <span class="block">{{ $c['id'] }}{{ $c['name'] ? ' – ' . $c['name'] : '' }}</span>
+                                @endforeach
+                            </dd>
+                        @else
+                            <dd class="mt-1 text-sm text-gray-800">{{ $ticket->client_name ?: '—' }}</dd>
+                        @endif
                     </div>
 
                     <div>
@@ -245,7 +253,8 @@
                 @endif
 
                 {{-- Formulaire ajout commentaire --}}
-                <form method="POST" action="{{ route('support.ticket-comment', $ticket->id) }}">
+                <form method="POST" action="{{ route('support.ticket-comment', $ticket->id) }}"
+                      x-data="{ comment: '{{ old('content') }}' }">
                     @csrf
                     <div>
                         <label for="comment_content" class="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
@@ -255,14 +264,14 @@
                                   name="content"
                                   rows="3"
                                   placeholder="Votre commentaire..."
+                                  x-model="comment"
                                   class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-none">{{ old('content') }}</textarea>
-                        @error('content')
-                            <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
-                        @enderror
                     </div>
                     <div class="mt-3 flex justify-end">
                         <button type="submit"
-                                class="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors">
+                                :disabled="comment.trim() === ''"
+                                :class="comment.trim() === '' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-indigo-700'"
+                                class="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl transition-colors">
                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
                             </svg>
