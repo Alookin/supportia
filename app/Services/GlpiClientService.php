@@ -229,11 +229,43 @@ class GlpiClientService
     }
 
     /**
+     * Convertit le markdown minimal généré par Claude en HTML compatible GLPI.
+     * GLPI attend du HTML ; le markdown brut s'affiche tel quel sans conversion.
+     */
+    private function markdownToGlpiHtml(string $text): string
+    {
+        $lines = explode("\n", $text);
+        $html  = [];
+
+        foreach ($lines as $line) {
+            // ## Titre  et  ### Titre → <br><b>Titre</b><br>
+            if (preg_match('/^#{2,}\s+(.+)$/', $line, $m)) {
+                $html[] = '<br><b>' . e($m[1]) . '</b><br>';
+                continue;
+            }
+
+            // - item  →  • item
+            if (preg_match('/^- (.+)$/', $line, $m)) {
+                $line = '• ' . $m[1];
+            }
+
+            // **texte** → <b>texte</b>
+            $line = preg_replace('/\*\*(.+?)\*\*/', '<b>$1</b>', $line);
+
+            $html[] = $line;
+        }
+
+        // Sauts de ligne → <br>
+        return implode('<br>', $html);
+    }
+
+    /**
      * Formate le contenu du ticket pour GLPI (HTML léger).
      */
     private function formatContent(array $ticketData): string
     {
-        $content = $ticketData['body'] ?? $ticketData['title'] ?? '';
+        $body    = $ticketData['body'] ?? $ticketData['title'] ?? '';
+        $content = $this->markdownToGlpiHtml($body);
 
         $meta = [];
         $meta[] = '<hr>';
