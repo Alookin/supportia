@@ -1,8 +1,24 @@
 # Zeno — Portail de support assisté par IA
 
+![PHP](https://img.shields.io/badge/PHP-8.2+-777BB4?style=flat-square&logo=php&logoColor=white)
+![Laravel](https://img.shields.io/badge/Laravel-12-FF2D20?style=flat-square&logo=laravel&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791?style=flat-square&logo=postgresql&logoColor=white)
+![Claude API](https://img.shields.io/badge/Claude_API-Anthropic-D97757?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)
+
 Zeno permet à des utilisateurs non-techniques (commerciaux, services généraux…) de créer des tickets GLPI en langage naturel. L'IA (Claude API) classifie automatiquement la demande, suggère une catégorie et une priorité, structure la description, puis crée le ticket dans GLPI via son API REST.
 
 L'application est **multi-tenant** : chaque organisation configure sa propre instance GLPI, ses catégories, ses utilisateurs et son branding (logo, couleur).
+
+---
+
+## Pourquoi Zeno ?
+
+Dans un contexte de support terrain avec 15 commerciaux itinérants, **93 % des tickets remontés ne contenaient ni catégorie, ni priorité, ni description structurée**. Les techniciens passaient un temps considérable à qualifier chaque demande avant de pouvoir la traiter.
+
+Les outils de ticketing classiques (GLPI, Jira, Redmine) présentent une interface pensée pour des profils techniques, ce qui freine leur adoption par les équipes terrain. La saisie manuelle des catégories ITSM, des niveaux de priorité et des descriptions structurées est perçue comme une contrainte sans valeur ajoutée par les non-techniciens.
+
+Zeno résout ce problème en **supprimant la friction** : le commercial décrit le problème comme il l'écrirait dans un message, et l'IA s'occupe du reste — qualification, structuration, création dans GLPI.
 
 ---
 
@@ -104,14 +120,49 @@ Organization::find($id)->update([
 
 ## Architecture
 
+### Flux de traitement d'un ticket
+
 ```
-Commercial → Formulaire Blade (description + clients)
-    → POST /support/tickets
-    → AIClassifierService  ──→ Claude API (JSON structuré)
-    │                      └─→ Fallback mots-clés (si API indisponible)
-    → GlpiClientService    ──→ API REST GLPI (initSession + POST /Ticket)
-    → SupportTicket (DB)   ──→ Audit local + retry si GLPI down
-    → Réponse JSON (ticket_id, glpi_ticket_id, estimation)
+  Navigateur
+  ┌─────────────────────────────────────────────────┐
+  │  Commercial                                     │
+  │  "Le client 24453 n'arrive plus à se connecter" │
+  └───────────────────┬─────────────────────────────┘
+                      │ POST /support/tickets
+                      ▼
+  ┌─────────────────────────────────────────────────┐
+  │  Zeno (Laravel)                                 │
+  │                                                 │
+  │  SupportTicket créé en base (statut: pending)   │
+  │                  │                              │
+  │                  ▼                              │
+  │  AIClassifierService                            │
+  │  ┌─────────────────────────────┐               │
+  │  │  Claude API (Anthropic)     │               │
+  │  │  → catégorie, priorité      │               │
+  │  │  → titre structuré          │               │
+  │  │  → description technique    │               │
+  │  │  → score de confiance       │               │
+  │  └──────────────┬──────────────┘               │
+  │                 │ confiance ≥ 0.7 ?             │
+  │         OUI ◄───┴───► NON → mode review        │
+  │          │                                      │
+  │          ▼                                      │
+  │  GlpiClientService                              │
+  │  ┌─────────────────────────────┐               │
+  │  │  API REST GLPI              │               │
+  │  │  initSession → POST /Ticket │               │
+  │  │  → ticket #XXXX créé        │               │
+  │  └──────────────┬──────────────┘               │
+  │                 │ GLPI down ? → retry (cron)    │
+  │                 ▼                               │
+  │  SupportTicket mis à jour (statut: created)     │
+  └───────────────────┬─────────────────────────────┘
+                      │ Réponse JSON
+                      ▼
+  ┌─────────────────────────────────────────────────┐
+  │  Commercial voit : ticket #XXXX, estimation     │
+  └─────────────────────────────────────────────────┘
 ```
 
 ### Composants principaux
@@ -133,6 +184,29 @@ php artisan support:retry-glpi              # Rejouer les tickets en échec GLPI
 php artisan db:seed --class=CategorySeeder  # Catégories de démo
 php artisan test                            # Suite de tests
 ```
+
+---
+
+## Sécurité
+
+- **Tokens GLPI chiffrés en base** — `glpi_app_token` et `glpi_user_token` sont stockés avec le chiffrement symétrique de Laravel (`cast: 'encrypted'`) ; ils ne sont jamais lisibles en clair dans la base
+- **Clé Claude API non exposée** — `CLAUDE_API_KEY` reste dans `.env` côté serveur ; aucune clé n'est transmise au navigateur
+- **Authentification requise** — toutes les routes de l'application passent par le middleware `auth` de Laravel Breeze
+- **Données hébergées on-premise** — l'instance est déployée sur VPS dédié (Hetzner) ; aucune donnée client ne transite par un service tiers en dehors de l'API Claude (description du ticket uniquement)
+- **Fallback gracieux** — si l'API Claude est indisponible, Zeno bascule automatiquement sur une classification par mots-clés et passe le ticket en mode review ; le service ne s'interrompt pas
+
+---
+
+## Coûts
+
+| Poste | Estimation |
+|-------|-----------|
+| Coût par ticket (Claude Sonnet) | ~0,003 € |
+| Volume normal (équipe de 15) | < 10 €/mois |
+| Migration GLPI | 0 € — GLPI reste en place, Zeno s'y connecte via API |
+| Infrastructure | VPS Hetzner CAX11 (~4 €/mois) |
+
+Le modèle `claude-sonnet-4-20250514` traite chaque description en moins de 3 secondes pour un coût marginal. À 100 tickets/jour, le coût IA reste inférieur à 10 €/mois.
 
 ---
 
@@ -166,3 +240,22 @@ php artisan test                            # Suite de tests
 - Support multilingue FR / EN / IT via le système i18n de Laravel
 - Détection automatique de la langue du navigateur (`Accept-Language`)
 - Langue forcée par organisation ou par utilisateur
+
+---
+
+## Contribution
+
+Les contributions sont les bienvenues. Pour proposer une modification :
+
+1. Forker le dépôt
+2. Créer une branche (`git checkout -b feature/ma-fonctionnalite`)
+3. Commiter les changements (`git commit -m 'feat: description'`)
+4. Ouvrir une Pull Request
+
+Conventions : code en anglais, UI en français, commits en [Conventional Commits](https://www.conventionalcommits.org/).
+
+---
+
+## License
+
+Ce projet est distribué sous licence [MIT](LICENSE).
