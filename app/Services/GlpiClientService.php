@@ -57,7 +57,12 @@ class GlpiClientService
             ],
         ];
 
-        Log::debug('[GLPI] Payload envoyé à /Ticket', $payload);
+        Log::debug('[GLPI] Envoi ticket', [
+            'organization_id'   => $organization->id,
+            'category_slug'     => $ticketData['category_slug'] ?? null,
+            'itilcategories_id' => $glpiCategoryId,
+            'priority'          => $ticketData['priority'] ?? 3,
+        ]);
 
         $response = $this->http()->withHeaders($this->headers($organization, $sessionToken))
             ->post($this->url($organization, '/Ticket'), $payload);

@@ -67,6 +67,13 @@ class SupportTicketController extends Controller
         // 2. Stocker la capture d'écran si fournie
         $screenshotPath = null;
         if ($request->hasFile('screenshot')) {
+            $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            $detectedMime = $request->file('screenshot')->getMimeType();
+            if (! in_array($detectedMime, $allowedMimes, true)) {
+                return response()->json([
+                    'error' => 'Type de fichier non autorisé. Formats acceptés : JPEG, PNG, GIF, WebP.',
+                ], 422);
+            }
             $screenshotPath = $request->file('screenshot')
                 ->store('screenshots', 'public');
         }

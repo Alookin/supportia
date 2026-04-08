@@ -224,19 +224,26 @@ class SupportDashboardController extends Controller
         $orgId = $org?->id;
         $userId = $user->id;
 
+        abort_if(! $orgId, 403, 'Aucune organisation active associée à votre compte.');
+
         // ─── Stats ────────────────────────────────────────────────
-        $myTotal = SupportTicket::where('user_id', $userId)->count();
+        $myTotal = SupportTicket::where('user_id', $userId)
+            ->where('organization_id', $orgId)
+            ->count();
 
         $myThisWeek = SupportTicket::where('user_id', $userId)
+            ->where('organization_id', $orgId)
             ->where('created_at', '>=', now()->startOfWeek())
             ->count();
 
         $myPending = SupportTicket::where('user_id', $userId)
+            ->where('organization_id', $orgId)
             ->where('status', 'pending')
             ->count();
 
         // ─── Tickets list ─────────────────────────────────────────
         $tickets = SupportTicket::where('user_id', $userId)
+            ->where('organization_id', $orgId)
             ->orderByDesc('created_at')
             ->get();
 
