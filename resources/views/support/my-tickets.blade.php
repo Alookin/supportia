@@ -5,7 +5,7 @@
                 Mes tickets
             </h2>
             <p class="mt-0.5 text-sm text-gray-500">
-                Tous les tickets que vous avez créés via SupportIA
+                Tous les tickets que vous avez créés via Zeno
             </p>
         </div>
     </x-slot>

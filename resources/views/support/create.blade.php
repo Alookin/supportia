@@ -12,10 +12,10 @@
         {{-- Header --}}
         <div class="flex items-center gap-3 mb-6 bg-white rounded-xl p-4 shadow-sm">
             <div class="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-lg">
-                S
+                Z
             </div>
             <div>
-                <h1 class="font-bold text-gray-900">SupportIA</h1>
+                <h1 class="font-bold text-gray-900">Zeno</h1>
                 <p class="text-xs text-gray-500">Signalement assisté par IA</p>
             </div>
             <template x-if="result && result.provider">

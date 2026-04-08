@@ -13,6 +13,8 @@ class Organization extends Model
     protected $fillable = [
         'name',
         'slug',
+        'logo_path',
+        'primary_color',
         'glpi_api_url',
         'glpi_app_token',
         'glpi_user_token',

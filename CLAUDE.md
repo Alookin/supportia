@@ -107,3 +107,9 @@ Les variables GLPI sont par organisation (en base), pas dans .env.
 - Chaque orga configure ses catégories, son GLPI, ses utilisateurs
 - Connecteurs vers d'autres ITSM (Redmine, Jira Service Management)
 - Facturation à la consommation
+
+### V4 — Internationalisation (i18n)
+- Support multilingue FR / EN / IT via le système i18n de Laravel (`resources/lang/`)
+- Détection automatique de la langue du navigateur (`Accept-Language`) via un middleware dédié
+- Toutes les chaînes UI passent par `__()` / `trans()`
+- La langue peut être forcée par organisation (colonne `locale` sur `organizations`) ou par utilisateur

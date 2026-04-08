@@ -1,59 +1,168 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Zeno — Portail de support assisté par IA
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Zeno permet à des utilisateurs non-techniques (commerciaux, services généraux…) de créer des tickets GLPI en langage naturel. L'IA (Claude API) classifie automatiquement la demande, suggère une catégorie et une priorité, structure la description, puis crée le ticket dans GLPI via son API REST.
 
-## About Laravel
+L'application est **multi-tenant** : chaque organisation configure sa propre instance GLPI, ses catégories, ses utilisateurs et son branding (logo, couleur).
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Fonctionnalités
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- **Formulaire en langage naturel** — le commercial décrit le problème en quelques phrases, sans connaître la nomenclature GLPI
+- **Classification IA (Claude API)** — catégorie, priorité, titre structuré et description générés automatiquement ; fallback par mots-clés si l'API est indisponible
+- **Mode review** — quand la confiance IA est basse, le commercial valide et ajuste avant envoi
+- **Multi-clients par ticket** — possibilité d'associer plusieurs clients (ID + nom) à une même demande
+- **Intégration GLPI via API REST** — création de ticket avec session token, retry automatique si GLPI est down
+- **Capture d'écran** — pièce jointe optionnelle uploadée avec le ticket
+- **Dashboard de suivi** — vue d'ensemble de l'activité par organisation
+- **Page détail ticket** — historique, classification IA, description structurée, commentaires
+- **Estimation du temps de traitement** — calculée sur les tickets précédents de la même catégorie
+- **Architecture multi-tenant** — une seule instance, plusieurs organisations avec configuration GLPI et branding indépendants
+- **Page de connexion brandée** — logo et couleur de l'organisation affichés sur la page de login
 
-## Learning Laravel
+---
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## Stack technique
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+| Couche | Technologie |
+|--------|-------------|
+| Framework | Laravel 12 (PHP 8.2+) |
+| Base de données | PostgreSQL 17 |
+| IA | Claude API — `claude-sonnet-4-20250514` (Anthropic) |
+| Frontend | Blade + Alpine.js + Tailwind CSS |
+| Auth | Laravel Breeze (email / mot de passe) |
+| Hébergement cible | VPS Hetzner, Debian 12 |
 
-## Laravel Sponsors
+---
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Installation
 
-### Premium Partners
+```bash
+# 1. Cloner le dépôt
+git clone <url-du-repo> zeno
+cd zeno
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+# 2. Installer les dépendances PHP
+composer install
 
-## Contributing
+# 3. Copier et configurer l'environnement
+cp .env.example .env
+php artisan key:generate
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+# 4. Créer la base de données PostgreSQL
+createdb zeno
+# puis renseigner DB_DATABASE, DB_USERNAME, DB_PASSWORD dans .env
 
-## Code of Conduct
+# 5. Appliquer les migrations
+php artisan migrate
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+# 6. (Optionnel) Charger les catégories de démo
+php artisan db:seed --class=CategorySeeder
 
-## Security Vulnerabilities
+# 7. Lier le stockage public (captures d'écran, logos)
+php artisan storage:link
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+# 8. Installer les assets frontend
+npm install && npm run build
 
-## License
+# 9. Lancer le serveur de développement
+php artisan serve
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+---
+
+## Configuration
+
+### Variables `.env` requises
+
+```env
+# IA — Claude API (Anthropic)
+CLAUDE_API_KEY=sk-ant-...
+CLAUDE_MODEL=claude-sonnet-4-20250514
+
+# Seuil de confiance IA (0.0–1.0) en dessous duquel le ticket passe en review
+SUPPORTIA_CONFIDENCE_THRESHOLD=0.7
+
+# Timeout des appels IA en secondes
+SUPPORTIA_AI_TIMEOUT=5
+```
+
+> Les paramètres GLPI (URL API, tokens) sont configurés **par organisation** en base de données, pas dans `.env`.
+
+### Branding organisation
+
+Chaque organisation peut avoir un logo et une couleur principale stockés en base :
+
+```php
+Organization::find($id)->update([
+    'logo_path'     => 'images/mon-logo.png', // relatif à public/
+    'primary_color' => '#1a4fd6',
+]);
+```
+
+---
+
+## Architecture
+
+```
+Commercial → Formulaire Blade (description + clients)
+    → POST /support/tickets
+    → AIClassifierService  ──→ Claude API (JSON structuré)
+    │                      └─→ Fallback mots-clés (si API indisponible)
+    → GlpiClientService    ──→ API REST GLPI (initSession + POST /Ticket)
+    → SupportTicket (DB)   ──→ Audit local + retry si GLPI down
+    → Réponse JSON (ticket_id, glpi_ticket_id, estimation)
+```
+
+### Composants principaux
+
+| Fichier | Rôle |
+|---------|------|
+| `AIClassifierService` | Construit le prompt, appelle Claude API, parse le JSON, fallback mots-clés |
+| `GlpiClientService` | Gestion session GLPI, création de ticket, conversion Markdown → HTML |
+| `SupportTicketController` | Validation, orchestration IA → GLPI, réponse JSON |
+| `RetryGlpiTicketCreation` | Job de retry pour les tickets non envoyés à GLPI |
+| `Organization` | Tenant : config GLPI, clé Claude, branding, catégories |
+| `SupportTicket` | Ticket local (audit, statut, retry, estimation) |
+| `GlpiCategoryMap` | Mapping slug IA ↔ ID catégorie GLPI par organisation |
+
+### Commandes artisan
+
+```bash
+php artisan support:retry-glpi              # Rejouer les tickets en échec GLPI
+php artisan db:seed --class=CategorySeeder  # Catégories de démo
+php artisan test                            # Suite de tests
+```
+
+---
+
+## Roadmap
+
+### V1 — MVP ✓
+- Formulaire en langage naturel
+- Classification IA + fallback mots-clés
+- Intégration GLPI via API REST
+- Multi-clients par ticket
+- Dashboard, détail ticket, commentaires
+- Capture d'écran
+- Estimation du temps de traitement
+- Page de login brandée par organisation
+- Retry automatique si GLPI indisponible
+
+### V2 — Base de connaissances & connecteurs
+- Intégration de la base de connaissances GLPI (`KnowbaseItem`)
+- Recherche automatique d'articles pertinents à la création d'un ticket
+- Analyse sémantique par Claude pour suggérer la solution au technicien
+- Génération d'articles KB depuis la résolution d'un ticket
+- Connecteur Redmine (alternative à GLPI)
+
+### V3 — Multi-tenant SaaS & sécurité
+- Onboarding self-service pour de nouvelles organisations
+- Intégration Authelia (SSO / authentification centralisée)
+- Connecteurs vers d'autres ITSM (Jira Service Management…)
+- Facturation à la consommation
+
+### V4 — Internationalisation (i18n)
+- Support multilingue FR / EN / IT via le système i18n de Laravel
+- Détection automatique de la langue du navigateur (`Accept-Language`)
+- Langue forcée par organisation ou par utilisateur

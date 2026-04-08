@@ -5,7 +5,7 @@
                 Suivi des tickets
             </h2>
             <p class="mt-0.5 text-sm text-gray-500">
-                Vue d'ensemble de l'activité SupportIA pour {{ $orgName }}
+                Vue d'ensemble de l'activité Zeno pour {{ $orgName }}
             </p>
         </div>
     </x-slot>
@@ -26,7 +26,7 @@
                     <div class="min-w-0">
                         <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">Total tickets (depuis le lancement)</p>
                         <p class="mt-1 text-4xl font-extrabold text-gray-900 leading-none">{{ $totalTickets }}</p>
-                        <p class="mt-1 text-xs text-gray-400">créés via SupportIA</p>
+                        <p class="mt-1 text-xs text-gray-400">créés via Zeno</p>
                     </div>
                 </div>
 

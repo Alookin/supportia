@@ -7,9 +7,9 @@
                 <div class="shrink-0 flex items-center">
                     <a href="{{ route('dashboard') }}" class="flex items-center gap-2">
                         <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm leading-none">
-                            S
+                            Z
                         </div>
-                        <span class="font-bold text-gray-900 text-base">SupportIA</span>
+                        <span class="font-bold text-gray-900 text-base">Zeno</span>
                     </a>
                 </div>
 
