@@ -1,0 +1,10 @@
+/vendor
+/node_modules
+/storage
+/bootstrap/cache
+/public
+.env
+*.lock
+composer.json
+package-json
+phpunit.xml
