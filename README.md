@@ -24,17 +24,30 @@ Zeno résout ce problème en **supprimant la friction** : le commercial décrit 
 
 ## Fonctionnalités
 
-- **Formulaire en langage naturel** — le commercial décrit le problème en quelques phrases, sans connaître la nomenclature GLPI
+### Création de ticket
+- **Formulaire en langage naturel** — le commercial décrit le problème en quelques phrases, sans connaître la nomenclature GLPI ; validation minimale de 20 caractères
 - **Classification IA (Claude API)** — catégorie, priorité, titre structuré et description générés automatiquement ; fallback par mots-clés si l'API est indisponible
 - **Mode review** — quand la confiance IA est basse, le commercial valide et ajuste avant envoi
 - **Multi-clients par ticket** — possibilité d'associer plusieurs clients (ID + nom) à une même demande
-- **Intégration GLPI via API REST** — création de ticket avec session token, retry automatique si GLPI est down
-- **Capture d'écran** — pièce jointe optionnelle uploadée avec le ticket
+- **Pièces jointes multiples sécurisées** — jusqu'à 5 fichiers (images, PDF, CSV, TXT, LOG), 10 Mo max par fichier, stockage privé (hors `public/`), servis via route authentifiée ; conformité RGPD (suppression physique à la clôture du ticket)
+
+### Intégration GLPI
+- **Création de ticket via API REST** — session token, retry automatique si GLPI est indisponible
+- **Assignation automatique du demandeur** — le `glpi_user_id` de l'utilisateur est transmis comme `_users_id_requester` ; en complément, l'email est passé via `_users_id_requester_notif` pour garantir les notifications même sans compte GLPI
+- **Suivi en temps réel** — statut GLPI (Nouveau / En cours / En attente / Résolu / Fermé), technicien assigné et followups visibles dans Zeno (cache 2 min, refresh automatique)
+- **Synchronisation des réponses** — les commentaires du commercial sont postés comme followups dans GLPI (`POST /ITILFollowup`) pour que les techniciens les voient directement ; les pièces jointes sont mentionnées dans le corps du followup
+
+### Interface & suivi
+- **Conversation style messagerie** — page détail ticket avec vue chat chronologique (bulles à gauche pour les réponses GLPI, à droite pour le commercial), scroll automatique, pièces jointes dans les bulles
+- **Commentaires avec fichiers** — le commercial peut joindre un fichier à chaque message depuis la conversation
+- **Page "Mes tickets"** — liste filtrée par statut (En cours / En attente / Résolus / Tous), onglet "En cours" actif par défaut ; légende des statuts avec info-bulle
 - **Dashboard de suivi** — vue d'ensemble de l'activité par organisation
-- **Page détail ticket** — historique, classification IA, description structurée, commentaires
 - **Estimation du temps de traitement** — calculée sur les tickets précédents de la même catégorie
+
+### Compte & organisation
 - **Architecture multi-tenant** — une seule instance, plusieurs organisations avec configuration GLPI et branding indépendants
-- **Page de connexion brandée** — logo et couleur de l'organisation affichés sur la page de login
+- **Page de connexion brandée Via-Mobilis** — logo et couleur de l'organisation affichés sur la page de login
+- **Interface entièrement en français** — traduction complète via le système i18n de Laravel (`resources/lang/fr/`)
 
 ---
 
@@ -170,7 +183,7 @@ Organization::find($id)->update([
 | Fichier | Rôle |
 |---------|------|
 | `AIClassifierService` | Construit le prompt, appelle Claude API, parse le JSON, fallback mots-clés |
-| `GlpiClientService` | Gestion session GLPI, création de ticket, conversion Markdown → HTML |
+| `GlpiClientService` | Session GLPI, création de ticket, suivi temps réel, followups, conversion Markdown → HTML |
 | `SupportTicketController` | Validation, orchestration IA → GLPI, réponse JSON |
 | `RetryGlpiTicketCreation` | Job de retry pour les tickets non envoyés à GLPI |
 | `Organization` | Tenant : config GLPI, clé Claude, branding, catégories |
@@ -213,14 +226,18 @@ Le modèle `claude-sonnet-4-20250514` traite chaque description en moins de 3 se
 ## Roadmap
 
 ### V1 — MVP ✓
-- Formulaire en langage naturel
+- Formulaire en langage naturel (validation 20 car. minimum)
 - Classification IA + fallback mots-clés
-- Intégration GLPI via API REST
+- Intégration GLPI via API REST (création, suivi temps réel, followups)
+- Assignation du demandeur par glpi_user_id + email de notification
 - Multi-clients par ticket
-- Dashboard, détail ticket, commentaires
-- Capture d'écran
-- Estimation du temps de traitement
-- Page de login brandée par organisation
+- Pièces jointes multiples sécurisées (stockage privé, RGPD)
+- Conversation style messagerie sur la page détail ticket
+- Commentaires du commercial synchronisés vers GLPI
+- Dashboard, estimation du temps de traitement
+- Page "Mes tickets" avec filtres de statut
+- Page de login brandée par organisation (Via-Mobilis)
+- Interface française complète (i18n)
 - Retry automatique si GLPI indisponible
 
 ### V2 — Base de connaissances & connecteurs
