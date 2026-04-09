@@ -58,9 +58,33 @@
             </div>
 
             {{-- ── Tableau des tickets ─────────────────────────────── --}}
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 class="text-sm font-semibold text-gray-700">Tous mes tickets</h3>
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+                 x-data="{ filter: 'all' }">
+                <div class="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                    {{-- Filter tabs --}}
+                    <div class="flex items-center gap-1">
+                        @php
+                            $filterTabs = [
+                                'all'     => ['label' => 'Tous',        'count' => $tickets->count()],
+                                'created' => ['label' => 'Dans GLPI',   'count' => $tickets->where('status', 'created')->count()],
+                                'pending' => ['label' => 'En attente',  'count' => $tickets->whereIn('status', ['pending', 'queued'])->count()],
+                                'failed'  => ['label' => 'Échec',       'count' => $tickets->where('status', 'failed')->count()],
+                            ];
+                        @endphp
+                        @foreach($filterTabs as $key => $tab)
+                            <button @click="filter = '{{ $key }}'"
+                                    :class="filter === '{{ $key }}'
+                                        ? 'bg-indigo-600 text-white shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'"
+                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all">
+                                {{ $tab['label'] }}
+                                <span :class="filter === '{{ $key }}' ? 'bg-indigo-500 text-white' : 'bg-gray-200 text-gray-500'"
+                                      class="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold">
+                                    {{ $tab['count'] }}
+                                </span>
+                            </button>
+                        @endforeach
+                    </div>
                     <a href="{{ route('support.create') }}"
                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors">
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
@@ -95,6 +119,7 @@
                                     <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Catégorie</th>
                                     <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Priorité</th>
                                     <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Statut</th>
+                                    <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Mise à jour</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-50">
@@ -111,16 +136,38 @@
                                             default => ['label' => '—',    'class' => 'bg-gray-100 text-gray-400'],
                                         };
 
-                                        $statusConfig = match($ticket->status) {
-                                            'created' => ['label' => 'Créé',       'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
-                                            'pending' => ['label' => 'En attente', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
-                                            'queued'  => ['label' => 'En file',    'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',         'dot' => 'bg-blue-400'],
-                                            'failed'  => ['label' => 'Échec',      'class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',            'dot' => 'bg-red-500'],
-                                            default   => ['label' => $ticket->status ?? '—', 'class' => 'bg-gray-100 text-gray-500',                   'dot' => 'bg-gray-300'],
-                                        };
+                                        // GLPI status (if synced) overrides internal status label for created tickets
+                                        $glpiStatusInt = $ticket->glpi_status ? (int) $ticket->glpi_status : 0;
+                                        if ($ticket->status === 'created' && $glpiStatusInt > 0) {
+                                            $statusConfig = match($glpiStatusInt) {
+                                                1 => ['label' => 'Nouveau',           'class' => 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',       'dot' => 'bg-gray-400'],
+                                                2 => ['label' => 'En cours',          'class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',        'dot' => 'bg-blue-500'],
+                                                3 => ['label' => 'En cours',          'class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',        'dot' => 'bg-blue-500'],
+                                                4 => ['label' => 'En attente',        'class' => 'bg-orange-50 text-orange-700 ring-1 ring-orange-200',  'dot' => 'bg-orange-400'],
+                                                5 => ['label' => 'Résolu',            'class' => 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200','dot' => 'bg-emerald-500'],
+                                                6 => ['label' => 'Clos',              'class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-300',       'dot' => 'bg-gray-500'],
+                                                default => ['label' => 'Dans GLPI',   'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200','dot' => 'bg-emerald-500'],
+                                            };
+                                        } else {
+                                            $statusConfig = match($ticket->status) {
+                                                'created' => ['label' => 'Dans GLPI',  'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
+                                                'pending' => ['label' => 'En attente', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
+                                                'queued'  => ['label' => 'En file',    'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',         'dot' => 'bg-blue-400'],
+                                                'failed'  => ['label' => 'Échec',      'class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',            'dot' => 'bg-red-500'],
+                                                default   => ['label' => $ticket->status ?? '—', 'class' => 'bg-gray-100 text-gray-500',                   'dot' => 'bg-gray-300'],
+                                            };
+                                        }
 
+                                        // Alpine filter group for this row
+                                        $filterGroup = match($ticket->status) {
+                                            'created'          => 'created',
+                                            'pending','queued' => 'pending',
+                                            'failed'           => 'failed',
+                                            default            => 'other',
+                                        };
                                     @endphp
                                     <tr class="hover:bg-indigo-50/40 transition-colors cursor-pointer"
+                                        x-show="filter === 'all' || filter === '{{ $filterGroup }}'"
                                         onclick="window.location='{{ route('support.ticket-detail', $ticket->id) }}'">
 
                                         <td class="px-4 py-3 whitespace-nowrap">
@@ -156,6 +203,12 @@
                                             <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium {{ $statusConfig['class'] }}">
                                                 <span class="w-1.5 h-1.5 rounded-full {{ $statusConfig['dot'] }}"></span>
                                                 {{ $statusConfig['label'] }}
+                                            </span>
+                                        </td>
+
+                                        <td class="px-4 py-3 whitespace-nowrap">
+                                            <span class="text-gray-400 text-xs">
+                                                {{ $ticket->updated_at->setTimezone('Europe/Paris')->format('d/m/Y H:i') }}
                                             </span>
                                         </td>
 

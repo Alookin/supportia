@@ -41,8 +41,9 @@ class RetryGlpiTicketCreation implements ShouldQueue
                     'priority'        => $ticket->ai_priority,
                     'confidence'      => $ticket->ai_confidence,
                     'provider'        => $ticket->ai_provider,
-                    'commercial_name' => $ticket->user->name ?? 'N/A',
-                    'client_name'     => $ticket->client_name,
+                    'commercial_name'         => $ticket->user->name ?? 'N/A',
+                    'commercial_glpi_user_id' => $ticket->user->glpi_user_id ?? null,
+                    'client_name'             => $ticket->client_name,
                 ]);
 
                 $ticket->markAsCreatedInGlpi($glpiResult['id']);

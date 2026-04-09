@@ -100,20 +100,24 @@
                     </label>
                     <textarea x-model="description"
                               x-ref="textarea"
+                              @input="descriptionError = null"
                               rows="5"
                               placeholder="Ex : Le client n'arrive plus à se connecter depuis ce matin, ses annonces ne remontent plus sur LBC..."
                               class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm
                                      leading-relaxed focus:ring-2 focus:ring-blue-500
                                      focus:border-blue-500 outline-none transition-colors resize-y"
                     ></textarea>
-                    <div class="flex justify-between text-xs text-gray-400 mt-1">
-                        <span x-show="description.length > 0 && description.length < 10"
-                              class="text-amber-500">
-                            ⚠ Minimum 10 caractères
+                    <div class="flex justify-between items-start text-xs mt-1">
+                        <span :class="description.trim().length >= 20 ? 'text-green-500' : 'text-gray-400'"
+                              x-text="description.trim().length >= 20
+                                  ? '✓ Description valide'
+                                  : 'Décrivez le problème en quelques mots (20 caractères minimum)'">
                         </span>
-                        <span x-show="description.length === 0 || description.length >= 10">&nbsp;</span>
-                        <span x-text="description.length + ' car.'"></span>
+                        <span class="text-gray-400 shrink-0 ml-2" x-text="description.length + ' car.'"></span>
                     </div>
+                    <template x-if="descriptionError">
+                        <p class="mt-1 text-xs text-red-500" x-text="descriptionError"></p>
+                    </template>
                 </div>
 
                 {{-- Capture d'écran --}}
@@ -425,6 +429,7 @@ function supportForm() {
         screenshot: null,
         screenshotPreview: null,
         error: null,
+        descriptionError: null,
 
         // IA result
         result: null,
@@ -456,7 +461,7 @@ function supportForm() {
         },
 
         get canSubmit() {
-            if (this.description.trim().length < 10) return false;
+            if (this.description.trim().length < 20) return false;
             if (this.isSpecificClient) return this.clients.some(c => c.id.trim() !== '');
             return true;
         },
@@ -483,6 +488,7 @@ function supportForm() {
         async submit() {
             if (!this.canSubmit) return;
             this.error = null;
+            this.descriptionError = null;
             this.state = 'loading';
             const start = Date.now();
 
@@ -518,6 +524,11 @@ function supportForm() {
                 const data = await resp.json();
 
                 if (!resp.ok) {
+                    if (data.type === 'description_insuffisante') {
+                        this.descriptionError = data.error;
+                        this.state = 'form';
+                        return;
+                    }
                     throw new Error(data.error || data.message || 'Erreur serveur');
                 }
 
@@ -605,6 +616,7 @@ function supportForm() {
             this.screenshot = null;
             this.screenshotPreview = null;
             this.error = null;
+            this.descriptionError = null;
             this.result = null;
             this.editResult = null;
             this.glpiTicketId = null;

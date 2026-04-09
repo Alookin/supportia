@@ -26,7 +26,7 @@ class SupportTicketController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'description'        => 'required|string|min:10|max:5000',
+            'description'        => 'required|string|min:20|max:5000',
             'is_specific_client' => 'nullable|in:0,1',
             'clients'            => ['nullable', 'string', function ($attr, $value, $fail) use ($request) {
                 if ($request->input('is_specific_client') == '1') {
@@ -64,7 +64,15 @@ class SupportTicketController extends Controller
                 ->implode(', ');
         }
 
-        // 2. Stocker la capture d'écran si fournie
+        // 2. Vérifier la qualité de la description avant toute persistance
+        if (! $this->classifier->isDescriptionSuffisante($validated['description'])) {
+            return response()->json([
+                'error' => 'Veuillez décrire le problème plus précisément pour que nous puissions vous aider efficacement.',
+                'type'  => 'description_insuffisante',
+            ], 422);
+        }
+
+        // 3. Stocker la capture d'écran si fournie
         $screenshotPath = null;
         if ($request->hasFile('screenshot')) {
             $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -78,7 +86,7 @@ class SupportTicketController extends Controller
                 ->store('screenshots', 'public');
         }
 
-        // 3. Créer le ticket local (traçabilité avant tout)
+        // 4. Créer le ticket local (traçabilité avant tout)
         $ticket = SupportTicket::create([
             'organization_id' => $organization->id,
             'user_id'         => $user->id,
@@ -89,7 +97,7 @@ class SupportTicketController extends Controller
             'status'          => 'pending',
         ]);
 
-        // 4. Classification IA
+        // 5. Classification IA
         $classification = $this->classifier->classify(
             $organization,
             $validated['description'],
@@ -97,7 +105,7 @@ class SupportTicketController extends Controller
             $ticket,
         );
 
-        // 5. Mettre à jour le ticket avec les résultats IA
+        // 6. Mettre à jour le ticket avec les résultats IA
         $ticket->update([
             'ai_title'         => $classification['title'],
             'ai_body'          => $classification['body'],
@@ -107,14 +115,14 @@ class SupportTicketController extends Controller
             'ai_provider'      => $classification['provider'],
         ]);
 
-        // 6. Si confiance suffisante → création directe dans GLPI
+        // 7. Si confiance suffisante → création directe dans GLPI
         $threshold = config('supportia.confidence_threshold', 0.7);
 
         if ($classification['confidence'] >= $threshold) {
             return $this->createInGlpi($organization, $ticket, $classification, $user);
         }
 
-        // 7. Confiance trop basse → retourner la suggestion pour validation
+        // 8. Confiance trop basse → retourner la suggestion pour validation
         return response()->json([
             'status'     => 'needs_review',
             'ticket_id'  => $ticket->id,
@@ -232,8 +240,9 @@ class SupportTicketController extends Controller
         try {
             $glpiResult = $this->glpiClient->createTicket($organization, [
                 ...$classification,
-                'commercial_name'  => $user->name,
-                'client_name'      => $ticket->client_name,
+                'commercial_name'         => $user->name,
+                'commercial_glpi_user_id' => $user->glpi_user_id,
+                'client_name'             => $ticket->client_name,
                 'has_screenshot'   => ! empty($ticket->screenshot_path),
             ]);
 

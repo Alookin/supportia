@@ -24,6 +24,7 @@ class User extends Authenticatable
         'email',
         'password',
         'organization_id',
+        'glpi_user_id',
     ];
 
     /**
@@ -45,7 +46,8 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'password'          => 'hashed',
+            'glpi_user_id'      => 'integer',
         ];
     }
 

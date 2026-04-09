@@ -14,6 +14,55 @@ class AIClassifierService
     private const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 
     /**
+     * Vérifie que la description contient un contenu suffisamment exploitable.
+     * Rejette : moins de 3 mots distincts, patterns de test/lorem/garbage.
+     */
+    public function isDescriptionSuffisante(string $description): bool
+    {
+        $lower = mb_strtolower(trim($description));
+
+        // Que des chiffres, espaces et ponctuation
+        if (preg_match('/^[\d\s\p{P}]+$/u', $lower)) {
+            return false;
+        }
+
+        // Caractère unique répété 4+ fois de suite (aaaa, zzzz, !!!!)
+        if (preg_match('/(.)\1{3,}/u', $lower)) {
+            return false;
+        }
+
+        // Mots de garbage connus
+        $garbageWords = [
+            'test', 'lorem', 'ipsum', 'asdf', 'qwerty', 'azerty',
+            'xxx', 'abc', 'aaa', 'bbb', 'zzz', '123', '456', '789',
+            'toto', 'tata', 'titi', 'blabla', 'foo', 'bar', 'baz',
+            'truc', 'machin', 'chose',
+        ];
+
+        // Tokens significatifs : 3+ caractères, non purement numériques
+        $tokens = preg_split('/[\s\p{P}]+/u', $lower, -1, PREG_SPLIT_NO_EMPTY);
+        $meaningful = array_values(array_unique(array_filter(
+            $tokens,
+            fn ($w) => mb_strlen($w) >= 3 && ! is_numeric($w)
+        )));
+
+        // Tous les mots sont des garbage words
+        if (! empty($meaningful) && array_sum(array_map(
+            fn ($w) => in_array($w, $garbageWords, true) ? 1 : 0,
+            $meaningful
+        )) === count($meaningful)) {
+            return false;
+        }
+
+        // Moins de 3 mots distincts significatifs
+        if (count($meaningful) < 3) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Classifie et enrichit une description de ticket.
      *
      * @return array{

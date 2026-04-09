@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\GlpiCategoryMap;
 use App\Models\SupportTicket;
 use App\Models\TicketComment;
+use App\Services\GlpiClientService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -194,7 +195,18 @@ class SupportDashboardController extends Controller
             ? SupportTicket::estimateResolutionHours($orgId, $ticket->ai_category_slug)
             : ['hours' => null, 'count' => 0];
 
-        return view('support.ticket-detail', compact('ticket', 'categoryLabel', 'estimate'));
+        $glpiData = [];
+        if ($ticket->glpi_ticket_id && $user->organization?->hasGlpiConfig()) {
+            $glpiData = app(GlpiClientService::class)
+                ->getTicketDetails($user->organization, $ticket->glpi_ticket_id);
+
+            if (! empty($glpiData['glpi_status'])) {
+                $ticket->update(['glpi_status' => $glpiData['glpi_status']]);
+                $ticket->refresh();
+            }
+        }
+
+        return view('support.ticket-detail', compact('ticket', 'categoryLabel', 'estimate', 'glpiData'));
     }
 
     public function addComment(Request $request, int $id): RedirectResponse

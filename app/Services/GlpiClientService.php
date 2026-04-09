@@ -44,18 +44,22 @@ class GlpiClientService
             'glpi_entity_id'   => $glpiEntityId,
         ]);
 
-        $payload = [
-            'input' => [
-                'name'              => $ticketData['title'],
-                'content'           => $this->formatContent($ticketData),
-                'itilcategories_id' => $glpiCategoryId,
-                'priority'          => $ticketData['priority'] ?? 3,
-                'type'              => config('supportia.glpi_ticket_type', 1),
-                'entities_id'       => $glpiEntityId,
-                'urgency'           => $ticketData['priority'] ?? 3,
-                'impact'            => min($ticketData['priority'] ?? 3, 4),
-            ],
+        $input = [
+            'name'              => $ticketData['title'],
+            'content'           => $this->formatContent($ticketData),
+            'itilcategories_id' => $glpiCategoryId,
+            'priority'          => $ticketData['priority'] ?? 3,
+            'type'              => config('supportia.glpi_ticket_type', 1),
+            'entities_id'       => $glpiEntityId,
+            'urgency'           => $ticketData['priority'] ?? 3,
+            'impact'            => min($ticketData['priority'] ?? 3, 4),
         ];
+
+        if (! empty($ticketData['commercial_glpi_user_id'])) {
+            $input['_users_id_requester'] = (int) $ticketData['commercial_glpi_user_id'];
+        }
+
+        $payload = ['input' => $input];
 
         Log::debug('[GLPI] Envoi ticket', [
             'organization_id'   => $organization->id,
@@ -91,6 +95,85 @@ class GlpiClientService
             'id'  => (int) $ticketId,
             'url' => $this->ticketUrl($organization, $ticketId),
         ];
+    }
+
+    /**
+     * Récupère le statut et les suivis d'un ticket GLPI.
+     *
+     * @return array{glpi_status: int, solve_date: string|null, followups: array}
+     */
+    public function getTicketDetails(Organization $organization, int $glpiTicketId): array
+    {
+        if (! $organization->hasGlpiConfig()) {
+            return [];
+        }
+
+        $cacheKey = "glpi_ticket_details_{$organization->id}_{$glpiTicketId}";
+
+        return Cache::remember($cacheKey, 120, function () use ($organization, $glpiTicketId) {
+            try {
+                $sessionToken = $this->getSessionToken($organization);
+
+                // GET /Ticket/{id}
+                $ticketResp = $this->http()
+                    ->withHeaders($this->headers($organization, $sessionToken))
+                    ->get($this->url($organization, "/Ticket/{$glpiTicketId}"));
+
+                if ($ticketResp->status() === 401) {
+                    $this->clearSessionToken($organization);
+                    $sessionToken = $this->getSessionToken($organization);
+                    $ticketResp = $this->http()
+                        ->withHeaders($this->headers($organization, $sessionToken))
+                        ->get($this->url($organization, "/Ticket/{$glpiTicketId}"));
+                }
+
+                if ($ticketResp->failed()) {
+                    return [];
+                }
+
+                $ticketData = $ticketResp->json();
+
+                // GET /Ticket/{id}/ITILFollowup
+                $fuResp = $this->http()
+                    ->withHeaders($this->headers($organization, $sessionToken))
+                    ->get($this->url($organization, "/Ticket/{$glpiTicketId}/ITILFollowup"), [
+                        'range' => '0-19',
+                    ]);
+
+                $followups = [];
+                if ($fuResp->ok()) {
+                    $raw = $fuResp->json();
+                    if (is_array($raw)) {
+                        foreach ($raw as $fu) {
+                            if (! is_array($fu)) {
+                                continue;
+                            }
+                            $content = strip_tags($fu['content'] ?? '');
+                            if (empty(trim($content))) {
+                                continue;
+                            }
+                            $followups[] = [
+                                'date'    => $fu['date'] ?? $fu['date_creation'] ?? null,
+                                'content' => $content,
+                            ];
+                        }
+                    }
+                }
+
+                return [
+                    'glpi_status' => (int) ($ticketData['status'] ?? 0),
+                    'solve_date'  => $ticketData['solvedate'] ?? $ticketData['closedate'] ?? null,
+                    'followups'   => $followups,
+                ];
+            } catch (\Throwable $e) {
+                Log::warning('[GLPI] getTicketDetails failed', [
+                    'glpi_ticket_id' => $glpiTicketId,
+                    'error'          => $e->getMessage(),
+                ]);
+
+                return [];
+            }
+        });
     }
 
     /**
@@ -140,6 +223,40 @@ class GlpiClientService
         }
 
         return $response->json('data') ?? [];
+    }
+
+    // ─── Requester assignment ──────────────────────────────
+
+    /**
+     * Corrige le demandeur d'un ticket GLPI existant via PUT /Ticket/{id}.
+     * Échec silencieux : le ticket est déjà créé, ne pas le faire échouer pour ça.
+     */
+    private function assignTicketRequester(
+        Organization $organization,
+        string $sessionToken,
+        int $ticketId,
+        int $glpiUserId,
+    ): void {
+        try {
+            $response = $this->http()
+                ->withHeaders($this->headers($organization, $sessionToken))
+                ->put($this->url($organization, "/Ticket/{$ticketId}"), [
+                    'input' => [
+                        '_users_id_requester' => $glpiUserId,
+                    ],
+                ]);
+
+            Log::debug('[GLPI] Assignation demandeur', [
+                'ticket_id'    => $ticketId,
+                'glpi_user_id' => $glpiUserId,
+                'status'       => $response->status(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('[GLPI] assignTicketRequester failed', [
+                'ticket_id' => $ticketId,
+                'error'     => $e->getMessage(),
+            ]);
+        }
     }
 
     // ─── Session management ────────────────────────────────

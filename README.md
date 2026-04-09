@@ -232,7 +232,7 @@ Le modèle `claude-sonnet-4-20250514` traite chaque description en moins de 3 se
 
 ### V3 — Multi-tenant SaaS & sécurité
 - Onboarding self-service pour de nouvelles organisations
-- Intégration Authelia (SSO / authentification centralisée)
+- Intégration OIDC (SSO / authentification centralisée)
 - Connecteurs vers d'autres ITSM (Jira Service Management…)
 - Facturation à la consommation
 
