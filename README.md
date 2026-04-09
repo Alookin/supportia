@@ -228,7 +228,7 @@ Le modèle `claude-sonnet-4-20250514` traite chaque description en moins de 3 se
 - Recherche automatique d'articles pertinents à la création d'un ticket
 - Analyse sémantique par Claude pour suggérer la solution au technicien
 - Génération d'articles KB depuis la résolution d'un ticket
-- Connecteur Redmine (alternative à GLPI)
+- Connecteur Redmine
 
 ### V3 — Multi-tenant SaaS & sécurité
 - Onboarding self-service pour de nouvelles organisations
