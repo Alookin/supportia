@@ -1,0 +1,44 @@
+{
+    "Name": "Nom",
+    "Email": "Adresse email",
+    "Email Address": "Adresse email",
+    "Password": "Mot de passe",
+    "Confirm Password": "Confirmer le mot de passe",
+    "Already registered?": "Déjà inscrit ?",
+    "Register": "S'inscrire",
+
+    "Profile": "Profil",
+    "Profile Information": "Informations du profil",
+    "Update your account's profile information and email address.": "Mettez à jour vos informations de profil et votre adresse email.",
+    "Your email address is unverified.": "Votre adresse email n'est pas vérifiée.",
+    "Click here to re-send the verification email.": "Cliquez ici pour renvoyer l'email de vérification.",
+    "A new verification link has been sent to your email address.": "Un nouveau lien de vérification a été envoyé à votre adresse email.",
+    "Save": "Enregistrer",
+    "Saved.": "Enregistré.",
+
+    "Update Password": "Modifier le mot de passe",
+    "Ensure your account is using a long, random password to stay secure.": "Utilisez un mot de passe long et aléatoire pour sécuriser votre compte.",
+    "Current Password": "Mot de passe actuel",
+    "New Password": "Nouveau mot de passe",
+
+    "Delete Account": "Supprimer le compte",
+    "Once your account is deleted, all of its resources and data will be permanently deleted. Before deleting your account, please download any data or information that you wish to retain.": "Une fois votre compte supprimé, toutes ses données seront définitivement effacées. Veuillez télécharger toute information que vous souhaitez conserver avant de procéder.",
+    "Are you sure you want to delete your account?": "Êtes-vous sûr de vouloir supprimer votre compte ?",
+    "Once your account is deleted, all of its resources and data will be permanently deleted. Please enter your password to confirm you would like to permanently delete your account.": "Une fois votre compte supprimé, toutes ses données seront définitivement effacées. Saisissez votre mot de passe pour confirmer la suppression.",
+    "Cancel": "Annuler",
+
+    "Dashboard": "Tableau de bord",
+    "Log Out": "Se déconnecter",
+
+    "Forgot your password? No problem. Just let us know your email address and we will email you a password reset link that will allow you to choose a new one.": "Mot de passe oublié ? Renseignez votre adresse email et nous vous enverrons un lien de réinitialisation.",
+    "Email Password Reset Link": "Envoyer le lien de réinitialisation",
+
+    "Reset Password": "Réinitialiser le mot de passe",
+
+    "Thanks for signing up! Before getting started, could you verify your email address by clicking on the link we just emailed to you? If you didn't receive the email, we will gladly send you another.": "Merci pour votre inscription ! Avant de commencer, veuillez vérifier votre adresse email en cliquant sur le lien que nous venons de vous envoyer. Si vous ne l'avez pas reçu, nous pouvons vous en envoyer un autre.",
+    "A new verification link has been sent to the email address you provided during registration.": "Un nouveau lien de vérification a été envoyé à l'adresse email fournie lors de l'inscription.",
+    "Resend Verification Email": "Renvoyer l'email de vérification",
+
+    "This is a secure area of the application. Please confirm your password before continuing.": "Cette zone est sécurisée. Veuillez confirmer votre mot de passe avant de continuer.",
+    "Confirm": "Confirmer"
+}
