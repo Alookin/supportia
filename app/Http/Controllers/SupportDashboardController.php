@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\GlpiCategoryMap;
 use App\Models\SupportTicket;
+use App\Models\TicketAttachment;
 use App\Models\TicketComment;
 use App\Services\GlpiClientService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 class SupportDashboardController extends Controller
@@ -183,7 +185,7 @@ class SupportDashboardController extends Controller
 
         $ticket = SupportTicket::where('id', $id)
             ->where('organization_id', $orgId)
-            ->with(['user:id,name', 'comments.user:id,name'])
+            ->with(['user:id,name', 'comments.user:id,name', 'attachments'])
             ->firstOrFail();
 
         $categoryLabel = $orgId
@@ -296,5 +298,45 @@ class SupportDashboardController extends Controller
             'categories',
             'glpiBaseUrl',
         ));
+    }
+
+    /**
+     * GET /support/tickets/{id}/attachments/{attachmentId}
+     *
+     * Téléchargement sécurisé d'une pièce jointe.
+     * — Vérifie que le ticket appartient à l'organisation de l'utilisateur.
+     * — Vérifie que la pièce jointe appartient bien au ticket.
+     * — Logue chaque téléchargement (qui, quand, quel fichier).
+     * — Jamais de chemin direct vers le fichier physique.
+     */
+    public function downloadAttachment(Request $request, int $id, int $attachmentId): mixed
+    {
+        $user  = $request->user();
+        $orgId = $user->organization?->id;
+
+        abort_if(! $orgId, 403);
+
+        $ticket = SupportTicket::where('id', $id)
+            ->where('organization_id', $orgId)
+            ->firstOrFail();
+
+        $attachment = TicketAttachment::where('id', $attachmentId)
+            ->where('support_ticket_id', $ticket->id)
+            ->firstOrFail();
+
+        Log::info('[Attachment] Download', [
+            'user_id'       => $user->id,
+            'user_name'     => $user->name,
+            'ticket_id'     => $ticket->id,
+            'attachment_id' => $attachment->id,
+            'filename'      => $attachment->original_name,
+        ]);
+
+        // Images → affichage inline (pour lightbox) ; autres fichiers → téléchargement
+        if ($attachment->isImage()) {
+            return Storage::disk('local')->response($attachment->path, $attachment->original_name);
+        }
+
+        return Storage::disk('local')->download($attachment->path, $attachment->original_name);
     }
 }

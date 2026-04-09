@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Storage;
 
 class SupportTicket extends Model
 {
@@ -42,6 +43,18 @@ class SupportTicket extends Model
         'was_modified_by_user' => 'boolean',
     ];
 
+    // ─── Boot ───────────────────────────────────────────
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        // RGPD : suppression des fichiers physiques avant suppression du ticket
+        static::deleting(function (self $ticket): void {
+            $ticket->deleteAttachments();
+        });
+    }
+
     // ─── Relations ──────────────────────────────────────
 
     public function organization(): BelongsTo
@@ -62,6 +75,28 @@ class SupportTicket extends Model
     public function comments(): HasMany
     {
         return $this->hasMany(TicketComment::class, 'support_ticket_id')->orderBy('created_at');
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(TicketAttachment::class, 'support_ticket_id')->orderBy('created_at');
+    }
+
+    // ─── RGPD ───────────────────────────────────────────
+
+    /**
+     * Supprime les fichiers physiques de toutes les pièces jointes du ticket.
+     * Appelé automatiquement avant la suppression du ticket (voir boot()).
+     *
+     * Politique de rétention recommandée : 12 mois après clôture du ticket
+     * (à définir selon la politique interne de conservation des données RGPD).
+     */
+    public function deleteAttachments(): void
+    {
+        foreach ($this->attachments()->lazy() as $attachment) {
+            Storage::disk('local')->delete($attachment->path);
+        }
+        $this->attachments()->delete();
     }
 
     // ─── Scopes ─────────────────────────────────────────

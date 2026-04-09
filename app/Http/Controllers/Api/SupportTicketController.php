@@ -9,10 +9,18 @@ use App\Services\GlpiClientService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class SupportTicketController extends Controller
 {
+    // Types MIME autorisés pour les pièces jointes
+    private const ALLOWED_MIMES = [
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'application/pdf',
+        'text/csv', 'text/plain', 'text/x-log',
+        'application/vnd.ms-excel',
+    ];
+
     public function __construct(
         private AIClassifierService $classifier,
         private GlpiClientService $glpiClient,
@@ -36,7 +44,17 @@ class SupportTicketController extends Controller
                     }
                 }
             }],
-            'screenshot'         => 'nullable|image|max:5120', // 5 MB
+            'attachments'   => 'nullable|array|max:5',
+            'attachments.*' => [
+                'nullable',
+                'file',
+                'max:10240', // 10 Mo par fichier
+                function ($attribute, $value, $fail) {
+                    if ($value && ! in_array($value->getMimeType(), self::ALLOWED_MIMES, true)) {
+                        $fail("Type de fichier non autorisé. Formats acceptés : images, PDF, CSV, TXT, LOG.");
+                    }
+                },
+            ],
         ]);
 
         $user = $request->user();
@@ -72,30 +90,35 @@ class SupportTicketController extends Controller
             ], 422);
         }
 
-        // 3. Stocker la capture d'écran si fournie
-        $screenshotPath = null;
-        if ($request->hasFile('screenshot')) {
-            $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-            $detectedMime = $request->file('screenshot')->getMimeType();
-            if (! in_array($detectedMime, $allowedMimes, true)) {
-                return response()->json([
-                    'error' => 'Type de fichier non autorisé. Formats acceptés : JPEG, PNG, GIF, WebP.',
-                ], 422);
-            }
-            $screenshotPath = $request->file('screenshot')
-                ->store('screenshots', 'public');
-        }
-
-        // 4. Créer le ticket local (traçabilité avant tout)
+        // 3. Créer le ticket local (traçabilité avant tout)
         $ticket = SupportTicket::create([
             'organization_id' => $organization->id,
             'user_id'         => $user->id,
             'client_ids'      => $clientIds,
             'client_name'     => $clientName,
             'raw_description' => $validated['description'],
-            'screenshot_path' => $screenshotPath,
             'status'          => 'pending',
         ]);
+
+        // 4. Stocker les pièces jointes dans le disque privé (storage/app/private)
+        if ($request->hasFile('attachments')) {
+            foreach ($request->file('attachments') as $file) {
+                if (! $file || ! $file->isValid()) {
+                    continue;
+                }
+                $ext      = strtolower($file->getClientOriginalExtension());
+                $filename = Str::uuid()->toString() . ($ext ? ".{$ext}" : '');
+                $path     = $file->storeAs("attachments/{$ticket->id}", $filename, 'local');
+
+                $ticket->attachments()->create([
+                    'filename'      => $filename,
+                    'original_name' => $file->getClientOriginalName(),
+                    'mime_type'     => $file->getMimeType(),
+                    'size'          => $file->getSize(),
+                    'path'          => $path,
+                ]);
+            }
+        }
 
         // 5. Classification IA
         $classification = $this->classifier->classify(
@@ -231,7 +254,7 @@ class SupportTicketController extends Controller
         return response()->json(['tickets' => $tickets]);
     }
 
-    // ─── Private ─────────────────────────────────────────────
+    // ─── Private ─────────────────────────────────────────
 
     /**
      * Tente la création dans GLPI et retourne la réponse appropriée.
@@ -248,7 +271,7 @@ class SupportTicketController extends Controller
                 'commercial_name'         => $user->name,
                 'commercial_glpi_user_id' => $user->glpi_user_id,
                 'client_name'             => $ticket->client_name,
-                'has_screenshot'   => ! empty($ticket->screenshot_path),
+                'attachment_count'        => $ticket->attachments()->count(),
             ]);
 
             $ticket->markAsCreatedInGlpi($glpiResult['id']);

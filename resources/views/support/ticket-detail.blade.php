@@ -1,4 +1,6 @@
-@php use Illuminate\Support\Facades\Storage; @endphp
+@php
+    use Illuminate\Support\Facades\Storage;
+@endphp
 <x-app-layout>
     <x-slot name="header">
         <div class="flex items-center gap-4">
@@ -308,29 +310,94 @@
                 </div>
             @endif
 
-            {{-- ── Capture d'écran ────────────────────────────────── --}}
-            @if($ticket->screenshot_path)
+            {{-- ── Pièces jointes ──────────────────────────────────── --}}
+            @if($ticket->attachments->isNotEmpty() || $ticket->screenshot_path)
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6"
-                     x-data="{ lightbox: false }">
-                    <h2 class="text-sm font-semibold text-gray-700 mb-4">Capture d'écran</h2>
-                    <img src="{{ Storage::url($ticket->screenshot_path) }}"
-                         alt="Capture d'écran du ticket"
-                         @click="lightbox = true"
-                         class="max-w-full max-h-96 rounded-xl border border-gray-100 shadow-sm hover:opacity-90 transition-opacity cursor-zoom-in">
-                    <p class="mt-2 text-xs text-gray-400">Cliquez pour agrandir</p>
+                     x-data="{ lightboxSrc: null }">
 
-                    {{-- Lightbox overlay --}}
-                    <div x-show="lightbox"
+                    <h2 class="text-sm font-semibold text-gray-700 mb-4">
+                        Pièces jointes
+                        @php $attachCount = $ticket->attachments->count() + ($ticket->screenshot_path ? 1 : 0); @endphp
+                        <span class="ml-1 text-xs font-normal text-gray-400">({{ $attachCount }})</span>
+                    </h2>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+
+                        {{-- Nouvelles pièces jointes (système sécurisé) --}}
+                        @foreach($ticket->attachments as $attachment)
+                            @if($attachment->isImage())
+                                {{-- Image → miniature cliquable + lightbox --}}
+                                <button type="button"
+                                        @click="lightboxSrc = '{{ route('support.ticket-attachment', [$ticket->id, $attachment->id]) }}'"
+                                        class="group relative aspect-video overflow-hidden rounded-xl border border-gray-100
+                                               hover:border-blue-300 transition-colors bg-gray-50 cursor-zoom-in">
+                                    <img src="{{ route('support.ticket-attachment', [$ticket->id, $attachment->id]) }}"
+                                         alt="{{ e($attachment->original_name) }}"
+                                         class="w-full h-full object-cover group-hover:opacity-90 transition-opacity">
+                                    <div class="absolute inset-x-0 bottom-0 px-2 py-1 bg-gradient-to-t from-black/50
+                                                opacity-0 group-hover:opacity-100 transition-opacity rounded-b-xl">
+                                        <p class="text-white text-xs truncate">{{ $attachment->original_name }}</p>
+                                    </div>
+                                </button>
+                            @else
+                                {{-- Fichier non-image → téléchargement --}}
+                                @php
+                                    $fileIcon = match(true) {
+                                        $attachment->mime_type === 'application/pdf'
+                                            => ['color' => 'text-red-500',     'label' => 'PDF'],
+                                        in_array($attachment->mime_type, ['text/csv', 'application/vnd.ms-excel'])
+                                            => ['color' => 'text-emerald-600', 'label' => 'CSV'],
+                                        default
+                                            => ['color' => 'text-gray-500',    'label' => 'FILE'],
+                                    };
+                                @endphp
+                                <a href="{{ route('support.ticket-attachment', [$ticket->id, $attachment->id]) }}"
+                                   class="flex items-center gap-3 p-3 rounded-xl border border-gray-100
+                                          hover:border-blue-300 hover:bg-blue-50/30 transition-colors">
+                                    <div class="shrink-0">
+                                        <svg class="w-8 h-8 {{ $fileIcon['color'] }}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                        </svg>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-medium text-gray-700 truncate">{{ $attachment->original_name }}</p>
+                                        <p class="text-xs text-gray-400">
+                                            {{ $fileIcon['label'] }} · {{ number_format($attachment->size / 1024, 0, ',', ' ') }} Ko
+                                        </p>
+                                    </div>
+                                    <svg class="w-4 h-4 text-gray-300 shrink-0 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                    </svg>
+                                </a>
+                            @endif
+                        @endforeach
+
+                        {{-- Capture d'écran legacy (ancien système public) --}}
+                        @if($ticket->screenshot_path)
+                            <button type="button"
+                                    @click="lightboxSrc = '{{ Storage::url($ticket->screenshot_path) }}'"
+                                    class="group relative aspect-video overflow-hidden rounded-xl border border-gray-100
+                                           hover:border-blue-300 transition-colors bg-gray-50 cursor-zoom-in">
+                                <img src="{{ Storage::url($ticket->screenshot_path) }}"
+                                     alt="Capture d'écran"
+                                     class="w-full h-full object-cover group-hover:opacity-90 transition-opacity">
+                                <div class="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-black/40 text-white
+                                            text-xs rounded-md leading-none">legacy</div>
+                            </button>
+                        @endif
+
+                    </div>
+
+                    {{-- Lightbox --}}
+                    <div x-show="lightboxSrc"
                          x-transition.opacity
-                         @click.self="lightbox = false"
-                         @keydown.escape.window="lightbox = false"
+                         @click.self="lightboxSrc = null"
+                         @keydown.escape.window="lightboxSrc = null"
                          class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
                          style="display:none">
-                        <button @click="lightbox = false"
+                        <button @click="lightboxSrc = null"
                                 class="absolute top-4 right-4 text-white/80 hover:text-white text-3xl leading-none">&times;</button>
-                        <img src="{{ Storage::url($ticket->screenshot_path) }}"
-                             alt="Capture d'écran agrandie"
-                             class="max-w-full max-h-full rounded-xl shadow-2xl">
+                        <img :src="lightboxSrc" class="max-w-full max-h-full rounded-xl shadow-2xl">
                     </div>
                 </div>
             @endif

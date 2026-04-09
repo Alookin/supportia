@@ -122,11 +122,11 @@ class GlpiClientService
         }
 
         try {
-            Log::debug('[GLPI Status] Starting', ['glpi_ticket_id' => $glpiTicketId]);
+            Log::info('[GLPI Status] Starting', ['glpi_ticket_id' => $glpiTicketId]);
 
             $sessionToken = $this->getSessionToken($organization);
 
-            Log::debug('[GLPI Status] Session', ['token' => $sessionToken ? 'ok' : 'null']);
+            Log::info('[GLPI Status] Session', ['token' => $sessionToken ? 'ok' : 'null']);
 
             // GET /Ticket/{id}?expand_dropdowns=true → statut + technicien en clair
             $ticketResp = $this->http()
@@ -134,12 +134,6 @@ class GlpiClientService
                 ->get($this->url($organization, "/Ticket/{$glpiTicketId}"), [
                     'expand_dropdowns' => true,
                 ]);
-
-            Log::debug('[GLPI Status] Ticket response', [
-                'status'    => $ticketResp->status(),
-                'has_id'    => isset($ticketResp->json()['id']),
-                'body_size' => strlen($ticketResp->body()),
-            ]);
 
             if ($ticketResp->status() === 401) {
                 $this->clearSessionToken($organization);
@@ -149,11 +143,6 @@ class GlpiClientService
                     ->get($this->url($organization, "/Ticket/{$glpiTicketId}"), [
                         'expand_dropdowns' => true,
                     ]);
-
-                Log::debug('[GLPI Status] Ticket response (retry after 401)', [
-                    'status'  => $ticketResp->status(),
-                    'has_id'  => isset($ticketResp->json()['id']),
-                ]);
             }
 
             // Le body GLPI peut contenir des blocs JSON concaténés après les données du ticket.
@@ -178,11 +167,6 @@ class GlpiClientService
                 }
             }
             $ticketData = json_decode(substr($body, $firstBrace, $end - $firstBrace + 1), true);
-
-            Log::debug('[GLPI Status] Parsed ticket', [
-                'has_id' => isset($ticketData['id']),
-                'keys'   => array_keys($ticketData ?? []),
-            ]);
 
             if (! isset($ticketData['id'])) {
                 Log::warning('[GLPI Status] Invalid ticket response', ['status' => $ticketResp->status()]);
@@ -244,12 +228,6 @@ class GlpiClientService
                     'range'                  => '0-19',
                 ]);
 
-            Log::debug('[GLPI Status] Followups response', [
-                'status'    => $fuResp->status(),
-                'count'     => count(($fuResp->json()['data'] ?? [])),
-                'body_size' => strlen($fuResp->body()),
-            ]);
-
             $followups = [];
             if ($fuResp->ok()) {
                 $fuData = $fuResp->json();
@@ -283,7 +261,6 @@ class GlpiClientService
 
             return $result;
         } catch (\Throwable $e) {
-            Log::debug('[GLPI Status] Error', ['message' => $e->getMessage()]);
             Log::warning('[GLPI] getTicketStatus failed', [
                 'glpi_ticket_id' => $glpiTicketId,
                 'error'          => $e->getMessage(),
@@ -510,8 +487,11 @@ class GlpiClientService
         $meta[] = '<hr>';
         $meta[] = '<b>Créé via SupportIA</b>';
 
-        if (! empty($ticketData['has_screenshot'])) {
-            $meta[] = '📎 Capture d\'écran disponible dans SupportIA';
+        $attachmentCount = (int) ($ticketData['attachment_count'] ?? 0);
+        if ($attachmentCount > 0) {
+            $s     = $attachmentCount > 1;
+            $meta[] = "📎 {$attachmentCount} pièce" . ($s ? 's' : '') . " jointe" . ($s ? 's' : '')
+                    . " disponible" . ($s ? 's' : '') . " dans Zeno";
         }
 
         if (! empty($ticketData['commercial_name'])) {

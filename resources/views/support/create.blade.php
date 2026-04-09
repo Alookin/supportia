@@ -108,10 +108,16 @@
                                      focus:border-blue-500 outline-none transition-colors resize-y"
                     ></textarea>
                     <div class="flex justify-between items-start text-xs mt-1">
-                        <span :class="description.trim().length >= 20 ? 'text-green-500' : 'text-gray-400'"
-                              x-text="description.trim().length >= 20
+                        <span :class="{
+                                'text-green-500': descriptionStatus === 'valid',
+                                'text-red-500':   descriptionStatus === 'garbage',
+                                'text-gray-400':  descriptionStatus === 'short'
+                              }"
+                              x-text="descriptionStatus === 'valid'
                                   ? '✓ Description valide'
-                                  : 'Décrivez le problème en quelques mots (20 caractères minimum)'">
+                                  : descriptionStatus === 'garbage'
+                                      ? 'Veuillez décrire le problème plus précisément'
+                                      : 'Décrivez le problème en quelques mots (20 caractères minimum)'">
                         </span>
                         <span class="text-gray-400 shrink-0 ml-2" x-text="description.length + ' car.'"></span>
                     </div>
@@ -120,41 +126,74 @@
                     </template>
                 </div>
 
-                {{-- Capture d'écran --}}
+                {{-- Pièces jointes --}}
                 <div class="mb-4">
                     <label class="block text-sm font-semibold text-gray-600 mb-1">
-                        Capture d'écran <span class="font-normal text-gray-400">(optionnel)</span>
+                        Pièces jointes
+                        <span class="font-normal text-gray-400">(optionnel · max 5 fichiers · 10 Mo chacun)</span>
                     </label>
-                    <div class="relative border-2 border-dashed rounded-lg transition-colors cursor-pointer"
-                         :class="screenshotPreview ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200 hover:border-blue-300'"
-                         @click="$refs.fileInput.click()"
+                    <div class="border-2 border-dashed rounded-lg transition-colors"
+                         :class="attachments.length > 0 ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200 hover:border-blue-300'"
                          @dragover.prevent="$event.currentTarget.classList.add('border-blue-400','bg-blue-50')"
                          @dragleave.prevent="$event.currentTarget.classList.remove('border-blue-400','bg-blue-50')"
-                         @drop.prevent="$event.currentTarget.classList.remove('border-blue-400','bg-blue-50'); handleScreenshot($event)">
-                        <input type="file" x-ref="fileInput" accept="image/*" class="hidden"
-                               @change="handleScreenshot($event)">
-                        <template x-if="!screenshotPreview">
-                            <div class="p-4 text-center">
+                         @drop.prevent="$event.currentTarget.classList.remove('border-blue-400','bg-blue-50'); addAttachments($event.dataTransfer.files)">
+
+                        <input type="file" x-ref="fileInput"
+                               accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.csv,.txt,.log"
+                               multiple class="hidden"
+                               @change="addAttachments($event.target.files); $event.target.value = ''">
+
+                        {{-- Zone vide --}}
+                        <template x-if="attachments.length === 0">
+                            <div class="p-4 text-center cursor-pointer" @click="$refs.fileInput.click()">
                                 <svg class="w-7 h-7 text-gray-300 mx-auto mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 002.112 2.13" />
                                 </svg>
-                                <p class="text-sm text-gray-400">Cliquez ou déposez une image</p>
-                                <p class="text-xs text-gray-300 mt-0.5">PNG, JPG, GIF — max 5 MB</p>
+                                <p class="text-sm text-gray-400">Cliquez ou déposez vos fichiers</p>
+                                <p class="text-xs text-gray-300 mt-0.5">Images, PDF, CSV, TXT, LOG</p>
                             </div>
                         </template>
-                        <template x-if="screenshotPreview">
-                            <div class="p-3 flex items-center gap-3">
-                                <img :src="screenshotPreview" class="h-16 w-16 object-cover rounded-lg border border-gray-200 shrink-0">
-                                <div class="min-w-0 flex-1">
-                                    <p class="text-sm font-medium text-gray-700 truncate" x-text="screenshot?.name"></p>
-                                    <p class="text-xs text-gray-400 mt-0.5" x-text="screenshot ? Math.round(screenshot.size / 1024) + ' KB' : ''"></p>
-                                </div>
-                                <button type="button" @click.stop="screenshot = null; screenshotPreview = null; $refs.fileInput.value = ''"
-                                        class="shrink-0 text-gray-400 hover:text-red-500 transition-colors p-1">
-                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
+
+                        {{-- Liste des fichiers sélectionnés --}}
+                        <template x-if="attachments.length > 0">
+                            <div class="p-3 space-y-1.5">
+                                <template x-for="(att, index) in attachments" :key="index">
+                                    <div class="flex items-center gap-2.5 py-1 px-1 rounded-lg hover:bg-white/60">
+                                        {{-- Miniature si image, icône sinon --}}
+                                        <template x-if="att.preview">
+                                            <img :src="att.preview"
+                                                 class="w-9 h-9 object-cover rounded border border-gray-200 shrink-0">
+                                        </template>
+                                        <template x-if="!att.preview">
+                                            <div class="w-9 h-9 flex items-center justify-center bg-gray-100 rounded shrink-0">
+                                                <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                                </svg>
+                                            </div>
+                                        </template>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm text-gray-700 truncate" x-text="att.name"></p>
+                                            <p class="text-xs text-gray-400" x-text="formatFileSize(att.size)"></p>
+                                        </div>
+                                        <button type="button" @click="removeAttachment(index)"
+                                                class="shrink-0 text-gray-300 hover:text-red-400 transition-colors p-1">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </template>
+                                {{-- Ajouter d'autres fichiers si < 5 --}}
+                                <template x-if="attachments.length < 5">
+                                    <button type="button" @click="$refs.fileInput.click()"
+                                            class="w-full mt-1 py-1.5 text-xs font-semibold text-blue-600
+                                                   hover:text-blue-800 transition-colors text-center">
+                                        + Ajouter un fichier
+                                    </button>
+                                </template>
+                                <template x-if="attachments.length >= 5">
+                                    <p class="text-xs text-center text-gray-400 mt-1">Maximum de 5 fichiers atteint</p>
+                                </template>
                             </div>
                         </template>
                     </div>
@@ -426,8 +465,7 @@ function supportForm() {
         isSpecificClient: true,
         clients: [{ id: '', name: '' }],
         context: '',
-        screenshot: null,
-        screenshotPreview: null,
+        attachments: [],    // [{file, name, size, preview}]
         error: null,
         descriptionError: null,
 
@@ -460,30 +498,79 @@ function supportForm() {
             this.clients.splice(index, 1);
         },
 
+        get descriptionStatus() {
+            if (this.description.trim().length < 20) return 'short';
+            if (this.isDescriptionGarbage()) return 'garbage';
+            return 'valid';
+        },
+
+        isDescriptionGarbage() {
+            const lower = this.description.trim().toLowerCase();
+            if (!lower) return false;
+
+            // Que des chiffres / ponctuation
+            if (/^[\d\s.,;:!?()\-]+$/.test(lower)) return true;
+
+            // Caractère répété 4+ fois de suite (aaaa, zzzz)
+            if (/(.)\1{3,}/.test(lower)) return true;
+
+            const garbageWords = new Set([
+                'test', 'lorem', 'ipsum', 'asdf', 'qwerty', 'azerty',
+                'xxx', 'abc', 'aaa', 'bbb', 'zzz', '123', '456', '789',
+                'toto', 'tata', 'titi', 'blabla', 'foo', 'bar', 'baz',
+                'truc', 'machin', 'chose',
+            ]);
+
+            const words = lower.split(/\s+/).filter(w => w.length >= 3 && isNaN(w));
+            if (words.length === 0) return false;
+
+            // Tous les mots sont des garbage words
+            if (words.every(w => garbageWords.has(w))) return true;
+
+            return false;
+        },
+
         get canSubmit() {
-            if (this.description.trim().length < 20) return false;
+            if (this.descriptionStatus !== 'valid') return false;
             if (this.isSpecificClient) return this.clients.some(c => c.id.trim() !== '');
             return true;
         },
 
-        // ─── Actions ────────────────────────
+        // ─── Pièces jointes ─────────────────
 
-        handleScreenshot(event) {
-            const file = event.target?.files?.[0] ?? event.dataTransfer?.files?.[0];
-            if (!file) return;
-            if (!file.type.startsWith('image/')) {
-                this.error = 'Le fichier doit être une image (PNG, JPG, GIF…).';
-                return;
-            }
-            if (file.size > 5 * 1024 * 1024) {
-                this.error = 'L\'image ne doit pas dépasser 5 MB.';
-                return;
-            }
-            this.screenshot = file;
-            const reader = new FileReader();
-            reader.onload = e => this.screenshotPreview = e.target.result;
-            reader.readAsDataURL(file);
+        addAttachments(files) {
+            const maxSize = 10 * 1024 * 1024; // 10 Mo
+
+            Array.from(files).forEach(file => {
+                if (this.attachments.length >= 5) return;
+                if (file.size > maxSize) {
+                    this.error = `"${file.name}" dépasse la taille maximale de 10 Mo.`;
+                    return;
+                }
+
+                const item = { file, name: file.name, size: file.size, preview: null };
+
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = e => { item.preview = e.target.result; };
+                    reader.readAsDataURL(file);
+                }
+
+                this.attachments.push(item);
+            });
         },
+
+        removeAttachment(index) {
+            this.attachments.splice(index, 1);
+        },
+
+        formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' o';
+            if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' Ko';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
+        },
+
+        // ─── Actions ────────────────────────
 
         async submit() {
             if (!this.canSubmit) return;
@@ -509,7 +596,7 @@ function supportForm() {
                     formData.append('clients', JSON.stringify(validClients));
                 }
 
-                if (this.screenshot) formData.append('screenshot', this.screenshot);
+                this.attachments.forEach(att => formData.append('attachments[]', att.file));
 
                 const resp = await fetch('/support/tickets', {
                     method: 'POST',
@@ -613,8 +700,7 @@ function supportForm() {
             this.isSpecificClient = true;
             this.clients = [{ id: '', name: '' }];
             this.context = '';
-            this.screenshot = null;
-            this.screenshotPreview = null;
+            this.attachments = [];
             this.error = null;
             this.descriptionError = null;
             this.result = null;
