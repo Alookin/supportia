@@ -9,6 +9,7 @@ class TicketAttachment extends Model
 {
     protected $fillable = [
         'support_ticket_id',
+        'ticket_comment_id',
         'filename',
         'original_name',
         'mime_type',
@@ -26,6 +27,11 @@ class TicketAttachment extends Model
     public function ticket(): BelongsTo
     {
         return $this->belongsTo(SupportTicket::class, 'support_ticket_id');
+    }
+
+    public function comment(): BelongsTo
+    {
+        return $this->belongsTo(TicketComment::class, 'ticket_comment_id');
     }
 
     public function isImage(): bool

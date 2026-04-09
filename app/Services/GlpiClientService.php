@@ -59,6 +59,15 @@ class GlpiClientService
             $input['_users_id_requester'] = (int) $ticketData['commercial_glpi_user_id'];
         }
 
+        // Identification du demandeur par email (fallback si glpi_user_id indisponible,
+        // ou complément pour garantir les notifications même sans compte GLPI)
+        if (! empty($ticketData['commercial_email'])) {
+            $input['_users_id_requester_notif'] = [
+                'use_notification'  => 1,
+                'alternative_email' => $ticketData['commercial_email'],
+            ];
+        }
+
         $payload = ['input' => $input];
 
         Log::debug('[GLPI] Envoi ticket', [
@@ -216,34 +225,81 @@ class GlpiClientService
                 }
             }
 
-            // Followups : GET /ITILFollowup?searchText[tickets_id]={id}
-            // forcedisplay : 2=id, 4=date, 5=content (les sous-ressources /Ticket/{id}/ITILFollowup retournent 405)
+            // Followups via searchText (criteria ne filtre pas fiablement dans GLPI 10)
+            // Champs forcedisplay : 1=id, 2=date, 4=content, 5=users_id
+            Log::debug('[GLPI Followups] Request', ['glpi_ticket_id' => $glpiTicketId]);
             $fuResp = $this->http()
                 ->withHeaders($this->headers($organization, $sessionToken))
                 ->get($this->url($organization, '/ITILFollowup'), [
-                    'searchText[tickets_id]' => $glpiTicketId,
-                    'forcedisplay[0]'        => 2,   // id
-                    'forcedisplay[1]'        => 4,   // date
-                    'forcedisplay[2]'        => 5,   // content
-                    'range'                  => '0-19',
+                    'searchText[items_id]' => $glpiTicketId,
+                    'searchText[itemtype]' => 'Ticket',
+                    'forcedisplay[0]'      => 2,   // date
+                    'forcedisplay[1]'      => 4,   // content
+                    'forcedisplay[2]'      => 5,   // users_id
+                    'forcedisplay[3]'      => 1,   // id
+                    'range'               => '0-19',
                 ]);
 
+            Log::debug('[GLPI Followups] Response', [
+                'status'       => $fuResp->status(),
+                'body_preview' => substr($fuResp->body(), 0, 300),
+            ]);
+
             $followups = [];
-            if ($fuResp->ok()) {
-                $fuData = $fuResp->json();
-                $rows   = $fuData['data'] ?? (is_array($fuData) ? $fuData : []);
+            $fuBody = $fuResp->body();
+            $followupsData = null;
+            // Extraire le tableau JSON depuis le début du body (même si GLPI retourne 405)
+            $firstBracket = strpos($fuBody, '[');
+            if ($firstBracket !== false) {
+                $depth = 0;
+                $end = $firstBracket;
+                for ($i = $firstBracket; $i < strlen($fuBody); $i++) {
+                    if ($fuBody[$i] === '[' || $fuBody[$i] === '{') $depth++;
+                    if ($fuBody[$i] === ']' || $fuBody[$i] === '}') $depth--;
+                    if ($depth === 0) { $end = $i; break; }
+                }
+                $followupsData = json_decode(substr($fuBody, $firstBracket, $end - $firstBracket + 1), true);
+            }
+
+            if (is_array($followupsData)) {
+                $rows   = $followupsData['data'] ?? (is_array($followupsData) ? $followupsData : []);
+
+                // Cache local des noms d'auteurs pour éviter les requêtes redondantes
+                $userNameCache = [];
+
                 foreach ($rows as $fu) {
                     if (! is_array($fu)) {
                         continue;
                     }
-                    // forcedisplay retourne les champs par numéro : 4=date, 5=content
-                    $content = strip_tags($fu['5'] ?? $fu['content'] ?? '');
-                    if (empty(trim($content))) {
+
+                    // Champ 4 = content
+                    // GLPI encode parfois les tags en entités HTML (&#60;p&#62; etc.)
+                    // Ordre obligatoire : 1) décoder les entités, 2) convertir blocs en \n, 3) strip_tags
+                    $raw     = $fu['4'] ?? $fu['content'] ?? '';
+                    $decoded = html_entity_decode($raw, ENT_QUOTES, 'UTF-8');
+                    $decoded = preg_replace('/<\s*(br|p|div|li)[^>]*>/i', "\n", $decoded);
+                    $content = trim(preg_replace('/\n{3,}/', "\n\n", strip_tags($decoded)));
+
+                    if (empty($content)) {
                         continue;
                     }
+
+                    // Champ 5 = users_id → lookup du nom complet
+                    $usersId    = (int) ($fu['5'] ?? 0);
+                    $authorName = null;
+
+                    if ($usersId > 0) {
+                        if (array_key_exists($usersId, $userNameCache)) {
+                            $authorName = $userNameCache[$usersId];
+                        } else {
+                            $authorName             = $this->fetchGlpiUserName($organization, $sessionToken, $usersId);
+                            $userNameCache[$usersId] = $authorName;
+                        }
+                    }
+
                     $followups[] = [
-                        'date'    => $fu['4'] ?? $fu['date'] ?? null,
-                        'author'  => null, // non disponible sans lookup supplémentaire
+                        'date'    => $fu['2'] ?? $fu['date'] ?? null,  // champ 2 = date
+                        'author'  => $authorName,
                         'content' => $content,
                     ];
                 }
@@ -319,6 +375,62 @@ class GlpiClientService
         return $response->json('data') ?? [];
     }
 
+    // ─── Followup ──────────────────────────────────────────
+
+    /**
+     * Crée un followup sur un ticket GLPI (POST /ITILFollowup).
+     *
+     * Utilisé pour transmettre les réponses commerciales (TicketComment)
+     * directement dans GLPI afin que le technicien les voie.
+     *
+     * Retourne true si le followup a été créé, false si GLPI est indisponible.
+     * Jamais d'exception : échec silencieux (le commentaire Zeno est déjà sauvegardé).
+     */
+    public function addFollowup(Organization $organization, int $glpiTicketId, string $content): bool
+    {
+        if (! $organization->hasGlpiConfig()) {
+            return false;
+        }
+
+        try {
+            $sessionToken = $this->getSessionToken($organization);
+
+            $payload = [
+                'input' => [
+                    'items_id' => $glpiTicketId,
+                    'itemtype' => 'Ticket',
+                    'content'  => nl2br(e($content)),
+                ],
+            ];
+
+            $response = $this->http()
+                ->withHeaders($this->headers($organization, $sessionToken))
+                ->post($this->url($organization, '/ITILFollowup'), $payload);
+
+            if ($response->status() === 401) {
+                $this->clearSessionToken($organization);
+                $sessionToken = $this->getSessionToken($organization);
+                $response     = $this->http()
+                    ->withHeaders($this->headers($organization, $sessionToken))
+                    ->post($this->url($organization, '/ITILFollowup'), $payload);
+            }
+
+            Log::debug('[GLPI] addFollowup', [
+                'glpi_ticket_id' => $glpiTicketId,
+                'status'         => $response->status(),
+            ]);
+
+            return $response->successful();
+        } catch (\Throwable $e) {
+            Log::warning('[GLPI] addFollowup failed', [
+                'glpi_ticket_id' => $glpiTicketId,
+                'error'          => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
     // ─── Requester assignment ──────────────────────────────
 
     /**
@@ -384,6 +496,49 @@ class GlpiClientService
     }
 
     // ─── Helpers ────────────────────────────────────────────
+
+    /**
+     * Récupère le nom complet d'un utilisateur GLPI par son ID.
+     * Retourne null silencieusement en cas d'échec (ne doit pas bloquer l'affichage).
+     * Champ 34 = realname, champ 9 = firstname, champ 1 = login (fallback).
+     */
+    private function fetchGlpiUserName(Organization $organization, string $sessionToken, int $userId): ?string
+    {
+        try {
+            $resp = $this->http()
+                ->withHeaders($this->headers($organization, $sessionToken))
+                ->get($this->url($organization, "/User/{$userId}"), [
+                    'forcedisplay[0]' => 1,   // login
+                    'forcedisplay[1]' => 34,  // realname (nom)
+                    'forcedisplay[2]' => 9,   // firstname (prénom)
+                ]);
+
+            if (! $resp->ok()) {
+                return null;
+            }
+
+            $data = $this->parseFirstJson($resp->body());
+
+            // Essayer prénom + nom, puis nom seul, puis login
+            $realname  = trim($data['34'] ?? $data['realname']  ?? '');
+            $firstname = trim($data['9']  ?? $data['firstname'] ?? '');
+            $login     = trim($data['1']  ?? $data['name']      ?? '');
+
+            if ($firstname && $realname) {
+                return $firstname . ' ' . $realname;
+            }
+            if ($realname) {
+                return $realname;
+            }
+            if ($login) {
+                return $login;
+            }
+
+            return null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
 
     private function headers(Organization $organization, string $sessionToken): array
     {
@@ -485,7 +640,7 @@ class GlpiClientService
 
         $meta = [];
         $meta[] = '<hr>';
-        $meta[] = '<b>Créé via SupportIA</b>';
+        $meta[] = '<b>Créé via Zeno</b>';
 
         $attachmentCount = (int) ($ticketData['attachment_count'] ?? 0);
         if ($attachmentCount > 0) {

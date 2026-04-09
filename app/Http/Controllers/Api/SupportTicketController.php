@@ -269,6 +269,7 @@ class SupportTicketController extends Controller
             $glpiResult = $this->glpiClient->createTicket($organization, [
                 ...$classification,
                 'commercial_name'         => $user->name,
+                'commercial_email'        => $user->email,
                 'commercial_glpi_user_id' => $user->glpi_user_id,
                 'client_name'             => $ticket->client_name,
                 'attachment_count'        => $ticket->attachments()->count(),

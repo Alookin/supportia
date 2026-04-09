@@ -59,7 +59,7 @@
 
             {{-- ── Tableau des tickets ─────────────────────────────── --}}
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
-                 x-data="{ filter: 'all' }">
+                 x-data="{ filter: 'en_cours' }">
                 <div class="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
                     {{-- Filter tabs --}}
                     <div class="flex items-center gap-1">

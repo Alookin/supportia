@@ -39,6 +39,8 @@
                                 'pending' => ['label' => 'En attente', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
                                 'queued'  => ['label' => 'En file',    'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',         'dot' => 'bg-blue-400'],
                                 'failed'  => ['label' => 'Échec',      'class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',            'dot' => 'bg-red-500'],
+                                'resolved'=> ['label' => 'Résolu',     'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
+                                'closed'  => ['label' => 'Fermé',      'class' => 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',          'dot' => 'bg-gray-500'],
                                 default   => ['label' => $ticket->status ?? '—', 'class' => 'bg-gray-100 text-gray-500', 'dot' => 'bg-gray-300'],
                             };
                             $priorityConfig = match($ticket->ai_priority) {
@@ -192,114 +194,250 @@
                 </div>
             @endif
 
-            {{-- ── Suivi du ticket ─────────────────────────────────── --}}
-            @if($ticket->glpi_ticket_id)
-                @if($glpiStatus === null)
-                    {{-- GLPI indisponible --}}
-                    <div class="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-700">
-                        <svg class="w-4 h-4 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            {{-- ── Conversation ────────────────────────────────────── --}}
+            @php
+                $glpiStatusConfig = null;
+                $resolutionDate   = null;
+                $glpiUrl          = $ticket->glpi_ticket_id
+                    ? str_replace('/apirest.php', '', rtrim($ticket->organization?->glpi_api_url ?? '', '/'))
+                      . '/front/ticket.form.php?id=' . $ticket->glpi_ticket_id
+                    : null;
+
+                if ($glpiStatus !== null) {
+                    $glpiStatusConfig = match($glpiStatus['status']) {
+                        1 => ['class' => 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',        'dot' => 'bg-gray-400'],
+                        2 => ['class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',          'dot' => 'bg-blue-500'],
+                        3 => ['class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',          'dot' => 'bg-blue-500'],
+                        4 => ['class' => 'bg-orange-50 text-orange-700 ring-1 ring-orange-200',    'dot' => 'bg-orange-400'],
+                        5 => ['class' => 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
+                        6 => ['class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-300',         'dot' => 'bg-gray-500'],
+                        default => ['class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-200',   'dot' => 'bg-gray-400'],
+                    };
+                    $resolutionDate = ! empty($glpiStatus['resolution_date'])
+                        ? \Illuminate\Support\Carbon::parse($glpiStatus['resolution_date'])->setTimezone('Europe/Paris')
+                        : null;
+                }
+
+                // Fusion followups GLPI + commentaires Zeno en ordre chronologique
+                $messages = [];
+
+                if ($glpiStatus !== null && ! empty($glpiStatus['followups'])) {
+                    foreach ($glpiStatus['followups'] as $fu) {
+                        $hasDate = ! empty($fu['date']) && $fu['date'] !== '0000-00-00 00:00:00';
+                        $fuTs    = 0;
+                        $fuDate  = null;
+                        if ($hasDate) {
+                            try {
+                                $parsed  = \Illuminate\Support\Carbon::parse($fu['date'], 'UTC');
+                                $fuTs    = $parsed->timestamp;
+                                $fuDate  = $parsed->setTimezone('Europe/Paris');
+                            } catch (\Throwable) {}
+                        }
+                        $messages[] = [
+                            'type'    => 'tech',
+                            'author'  => $fu['author'] ?? null,
+                            'user_id' => null,
+                            'content' => $fu['content'],
+                            'date'    => $fuDate,
+                            'ts'      => $fuTs,
+                        ];
+                    }
+                }
+
+                foreach ($ticket->comments as $comment) {
+                    $messages[] = [
+                        'type'       => 'commercial',
+                        'author'     => $comment->user?->name ?? '—',
+                        'user_id'    => $comment->user_id,
+                        'content'    => $comment->content,
+                        'attachment' => $comment->attachment,
+                        'date'       => $comment->created_at->setTimezone('Europe/Paris'),
+                        'ts'         => $comment->created_at->timestamp,
+                    ];
+                }
+
+                // Tri chronologique strict (les deux sources ont des ts en UTC)
+                usort($messages, function ($a, $b) {
+                    return ($a['ts'] ?? 0) <=> ($b['ts'] ?? 0);
+                });
+            @endphp
+
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+
+                {{-- En-tête --}}
+                <div class="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-gray-100">
+                    <div>
+                        <h2 class="text-sm font-semibold text-gray-700">Conversation</h2>
+                        @if($glpiStatus['assigned_to'] ?? null)
+                            <p class="text-xs text-gray-400 mt-0.5">Technicien : {{ $glpiStatus['assigned_to'] }}</p>
+                        @endif
+                    </div>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        @if($glpiStatusConfig)
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium {{ $glpiStatusConfig['class'] }}">
+                                <span class="w-1.5 h-1.5 rounded-full {{ $glpiStatusConfig['dot'] }}"></span>
+                                {{ $glpiStatus['status_label'] }}
+                            </span>
+                        @endif
+                        @if($resolutionDate)
+                            <span class="text-xs text-gray-400">
+                                Résolu le {{ $resolutionDate->translatedFormat('d F Y à H:i') }}
+                            </span>
+                        @endif
+                        @if($glpiUrl)
+                            <a href="{{ $glpiUrl }}" target="_blank"
+                               class="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors">
+                                Voir dans GLPI
+                            </a>
+                        @endif
+                    </div>
+                </div>
+
+                {{-- Alerte GLPI indisponible --}}
+                @if($ticket->glpi_ticket_id && $glpiStatus === null)
+                    <div class="mx-6 mt-4 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-600">
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                         </svg>
-                        Suivi temporairement indisponible — GLPI ne répond pas.
-                        <a href="{{ str_replace('/apirest.php', '', rtrim($ticket->organization?->glpi_api_url ?? '', '/')) }}/front/ticket.form.php?id={{ $ticket->glpi_ticket_id }}"
-                           target="_blank" class="ml-auto text-xs text-amber-600 underline hover:text-amber-800">
-                            Ouvrir dans GLPI
-                        </a>
-                    </div>
-                @else
-                    @php
-                        $glpiStatusConfig = match($glpiStatus['status']) {
-                            1 => ['class' => 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',        'dot' => 'bg-gray-400'],
-                            2 => ['class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',          'dot' => 'bg-blue-500'],
-                            3 => ['class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',          'dot' => 'bg-blue-500'],
-                            4 => ['class' => 'bg-orange-50 text-orange-700 ring-1 ring-orange-200',    'dot' => 'bg-orange-400'],
-                            5 => ['class' => 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
-                            6 => ['class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-300',         'dot' => 'bg-gray-500'],
-                            default => ['class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-200',   'dot' => 'bg-gray-400'],
-                        };
-                        $resolutionDate = ! empty($glpiStatus['resolution_date'])
-                            ? \Illuminate\Support\Carbon::parse($glpiStatus['resolution_date'])->setTimezone('Europe/Paris')
-                            : null;
-                    @endphp
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-
-                        {{-- En-tête : titre + badge statut + lien GLPI --}}
-                        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-                            <h2 class="text-sm font-semibold text-gray-700">Suivi du ticket</h2>
-                            <div class="flex items-center gap-3">
-                                @if($glpiStatus['status'] > 0)
-                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium {{ $glpiStatusConfig['class'] }}">
-                                        <span class="w-1.5 h-1.5 rounded-full {{ $glpiStatusConfig['dot'] }}"></span>
-                                        {{ $glpiStatus['status_label'] }}
-                                    </span>
-                                @endif
-                                <a href="{{ str_replace('/apirest.php', '', rtrim($ticket->organization?->glpi_api_url ?? '', '/')) }}/front/ticket.form.php?id={{ $ticket->glpi_ticket_id }}"
-                                   target="_blank"
-                                   class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 transition-colors">
-                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                                    </svg>
-                                    Ticket #{{ $ticket->glpi_ticket_id }}
-                                </a>
-                            </div>
-                        </div>
-
-                        {{-- Méta : technicien + date résolution --}}
-                        @if($glpiStatus['assigned_to'] || $resolutionDate)
-                            <div class="flex flex-wrap gap-x-6 gap-y-1 mb-4 text-xs text-gray-500">
-                                @if($glpiStatus['assigned_to'])
-                                    <span>
-                                        <span class="font-semibold text-gray-400 uppercase tracking-wider">Technicien</span>
-                                        &nbsp;{{ $glpiStatus['assigned_to'] }}
-                                    </span>
-                                @endif
-                                @if($resolutionDate)
-                                    <span>
-                                        <span class="font-semibold text-gray-400 uppercase tracking-wider">Résolu le</span>
-                                        &nbsp;{{ $resolutionDate->translatedFormat('d F Y à H:i') }}
-                                    </span>
-                                @endif
-                            </div>
-                        @endif
-
-                        {{-- Fil des followups --}}
-                        @if(empty($glpiStatus['followups']))
-                            <p class="text-sm text-gray-400">Aucune réponse pour le moment.</p>
-                        @else
-                            <div class="space-y-4">
-                                @foreach($glpiStatus['followups'] as $fu)
-                                    @php
-                                        $fuDate = ! empty($fu['date']) && $fu['date'] !== '0000-00-00 00:00:00'
-                                            ? \Illuminate\Support\Carbon::parse($fu['date'])->setTimezone('Europe/Paris')
-                                            : null;
-                                        $fuAuthor  = $fu['author'] ?? null;
-                                        $fuInitial = $fuAuthor ? strtoupper(mb_substr($fuAuthor, 0, 1)) : '?';
-                                    @endphp
-                                    <div class="flex gap-3">
-                                        <div class="shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                                            <span class="text-xs font-bold text-indigo-600">{{ $fuInitial }}</span>
-                                        </div>
-                                        <div class="flex-1 min-w-0">
-                                            <div class="flex flex-wrap items-baseline gap-2 mb-1">
-                                                <span class="text-xs font-semibold text-indigo-600">
-                                                    {{ $fuAuthor ?? 'Technicien' }}
-                                                </span>
-                                                @if($fuDate)
-                                                    <span class="text-xs text-gray-400">
-                                                        {{ $fuDate->translatedFormat('d F Y à H:i') }}
-                                                    </span>
-                                                @endif
-                                            </div>
-                                            <div class="text-sm text-gray-700 whitespace-pre-wrap bg-indigo-50/50 rounded-lg px-3 py-2 border border-indigo-100/60">{{ $fu['content'] }}</div>
-                                        </div>
-                                    </div>
-                                @endforeach
-                            </div>
-                        @endif
-
+                        Suivi GLPI temporairement indisponible — les réponses du support ne s'affichent pas.
                     </div>
                 @endif
-            @endif
+
+                {{-- Zone messages --}}
+                <div id="chat-messages"
+                     class="px-6 py-4 space-y-4"
+                     style="max-height:500px;overflow-y:auto"
+                     x-init="$el.scrollTop = $el.scrollHeight">
+                    @if(empty($messages))
+                        <p class="text-sm text-gray-400 text-center py-8">Aucun message pour le moment.</p>
+                    @else
+                        @foreach($messages as $msg)
+                            @php
+                                $isCommercial = $msg['type'] === 'commercial';
+                                $isMe         = $isCommercial && $msg['user_id'] === auth()->id();
+                                $authorLabel  = $isMe ? 'Vous' : ($msg['author'] ?? ($isCommercial ? '—' : 'Technicien'));
+                                $initial      = strtoupper(mb_substr($msg['author'] ?? ($isCommercial ? '?' : 'T'), 0, 1));
+                            @endphp
+                            <div class="flex {{ $isCommercial ? 'flex-row-reverse' : 'flex-row' }} items-end gap-2">
+                                <div class="shrink-0 w-8 h-8 rounded-full flex items-center justify-center
+                                            {{ $isCommercial ? 'bg-blue-600' : 'bg-gray-200' }}">
+                                    <span class="text-xs font-bold {{ $isCommercial ? 'text-white' : 'text-gray-500' }}">
+                                        {{ $initial }}
+                                    </span>
+                                </div>
+                                <div class="max-w-[75%]">
+                                    <div class="flex {{ $isCommercial ? 'flex-row-reverse' : 'flex-row' }} items-baseline gap-2 mb-1">
+                                        <span class="text-xs font-semibold {{ $isCommercial ? 'text-blue-600' : 'text-gray-500' }}">
+                                            {{ $authorLabel }}
+                                        </span>
+                                        @if($msg['date'])
+                                            <span class="text-xs text-gray-400">
+                                                {{ $msg['date']->translatedFormat('d F Y à H:i') }}
+                                            </span>
+                                        @endif
+                                    </div>
+                                    <div class="rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap
+                                                {{ $isCommercial
+                                                    ? 'bg-blue-600 text-white rounded-br-sm'
+                                                    : 'bg-gray-100 text-gray-800 rounded-bl-sm' }}">
+                                        @if(! empty($msg['content'])){{ $msg['content'] }}@endif
+                                        {{-- Pièce jointe du commentaire --}}
+                                        @if($msg['attachment'] ?? null)
+                                            @php $att = $msg['attachment']; @endphp
+                                            @if($att->isImage())
+                                                <a href="{{ route('support.ticket-attachment', [$ticket->id, $att->id]) }}"
+                                                   target="_blank" class="block {{ !empty($msg['content']) ? 'mt-2' : '' }}">
+                                                    <img src="{{ route('support.ticket-attachment', [$ticket->id, $att->id]) }}"
+                                                         alt="{{ e($att->original_name) }}"
+                                                         class="max-w-[200px] rounded-xl {{ $isCommercial ? 'border border-white/20' : 'border border-gray-200' }}">
+                                                </a>
+                                            @else
+                                                <a href="{{ route('support.ticket-attachment', [$ticket->id, $att->id]) }}"
+                                                   class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs {{ !empty($msg['content']) ? 'mt-2' : '' }}
+                                                          {{ $isCommercial ? 'bg-white/20 text-white' : 'bg-white text-gray-600 border border-gray-200' }}">
+                                                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                                                    </svg>
+                                                    <span class="truncate max-w-[140px]">{{ $att->original_name }}</span>
+                                                </a>
+                                            @endif
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    @endif
+                </div>
+
+                {{-- Flash commentaire ajouté --}}
+                @if(session('comment_added'))
+                    <div class="mx-6 px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-lg text-sm text-emerald-700">
+                        Commentaire ajouté.
+                    </div>
+                @endif
+
+                {{-- Zone de saisie --}}
+                <div class="border-t border-gray-100 px-6 py-4">
+                    <form method="POST"
+                          action="{{ route('support.ticket-comment', $ticket->id) }}"
+                          enctype="multipart/form-data"
+                          x-data="{ msg: '', fileName: '' }"
+                          @submit="fileName = ''">
+                        @csrf
+
+                        {{-- Badge fichier sélectionné --}}
+                        <div x-show="fileName !== ''" class="mb-2 flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
+                            <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                            </svg>
+                            <span x-text="fileName" class="truncate max-w-[260px]"></span>
+                            <button type="button" @click="fileName = ''; $refs.fileInput.value = ''"
+                                    class="ml-auto shrink-0 text-blue-400 hover:text-blue-600">
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div class="flex items-end gap-2">
+                            {{-- Input file caché --}}
+                            <input type="file"
+                                   name="attachment"
+                                   id="msg_file"
+                                   x-ref="fileInput"
+                                   accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.csv,.txt,.log"
+                                   class="hidden"
+                                   @change="fileName = $event.target.files[0]?.name ?? ''">
+
+                            {{-- Bouton trombone --}}
+                            <button type="button"
+                                    @click="$refs.fileInput.click()"
+                                    class="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                                </svg>
+                            </button>
+
+                            <textarea name="content"
+                                      rows="2"
+                                      placeholder="Répondre au support..."
+                                      x-model="msg"
+                                      class="flex-1 rounded-2xl border border-gray-200 px-4 py-2.5 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none"></textarea>
+
+                            {{-- Bouton envoyer --}}
+                            <button type="submit"
+                                    :disabled="msg.trim() === '' && fileName === ''"
+                                    :class="msg.trim() === '' && fileName === '' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-blue-700'"
+                                    class="shrink-0 w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white transition-colors">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                                </svg>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
 
             {{-- ── Description originale ──────────────────────────── --}}
             @if($ticket->raw_description)
@@ -402,70 +540,6 @@
                 </div>
             @endif
 
-            {{-- ── Commentaires ────────────────────────────────────── --}}
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                <h2 class="text-sm font-semibold text-gray-700 mb-4">Commentaires</h2>
-
-                @if(session('comment_added'))
-                    <div class="mb-4 px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-lg text-sm text-emerald-700">
-                        Commentaire ajouté.
-                    </div>
-                @endif
-
-                {{-- Liste des commentaires --}}
-                @if($ticket->comments->isEmpty())
-                    <p class="text-sm text-gray-400 mb-6">Aucun commentaire pour le moment.</p>
-                @else
-                    <div class="space-y-4 mb-6">
-                        @foreach($ticket->comments as $comment)
-                            <div class="flex gap-3">
-                                <div class="shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                                    <span class="text-xs font-bold text-indigo-600">
-                                        {{ strtoupper(substr($comment->user?->name ?? '?', 0, 1)) }}
-                                    </span>
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <div class="flex items-baseline gap-2">
-                                        <span class="text-sm font-semibold text-gray-800">{{ $comment->user?->name ?? '—' }}</span>
-                                        <span class="text-xs text-gray-400">
-                                            {{ $comment->created_at->setTimezone('Europe/Paris')->translatedFormat('d F Y à H:i') }}
-                                        </span>
-                                    </div>
-                                    <p class="mt-1 text-sm text-gray-700 whitespace-pre-wrap">{{ $comment->content }}</p>
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                @endif
-
-                {{-- Formulaire ajout commentaire --}}
-                <form method="POST" action="{{ route('support.ticket-comment', $ticket->id) }}"
-                      x-data="{ comment: '{{ old('content') }}' }">
-                    @csrf
-                    <div>
-                        <label for="comment_content" class="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-                            Ajouter un commentaire
-                        </label>
-                        <textarea id="comment_content"
-                                  name="content"
-                                  rows="3"
-                                  placeholder="Votre commentaire..."
-                                  x-model="comment"
-                                  class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-none">{{ old('content') }}</textarea>
-                    </div>
-                    <div class="mt-3 flex justify-end">
-                        <button type="submit"
-                                :disabled="comment.trim() === ''"
-                                :class="comment.trim() === '' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-indigo-700'"
-                                class="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl transition-colors">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                            </svg>
-                            Envoyer
-                        </button>
-                    </div>
-                </form>
-            </div>
 
             {{-- ── Bouton retour ───────────────────────────────────── --}}
             <div class="pb-4">

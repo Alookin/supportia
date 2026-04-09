@@ -10,6 +10,7 @@ use App\Services\GlpiClientService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
@@ -185,7 +186,7 @@ class SupportDashboardController extends Controller
 
         $ticket = SupportTicket::where('id', $id)
             ->where('organization_id', $orgId)
-            ->with(['user:id,name', 'comments.user:id,name', 'attachments'])
+            ->with(['user:id,name', 'comments.user:id,name', 'comments.attachment', 'attachments'])
             ->firstOrFail();
 
         $categoryLabel = $orgId
@@ -240,12 +241,65 @@ class SupportDashboardController extends Controller
             ->where('organization_id', $orgId)
             ->firstOrFail();
 
-        $request->validate(['content' => ['required', 'string', 'max:2000']]);
-
-        $ticket->comments()->create([
-            'user_id' => $user->id,
-            'content' => $request->content,
+        $request->validate([
+            'content'    => ['nullable', 'string', 'max:2000'],
+            'attachment' => ['nullable', 'file', 'max:10240',
+                             'mimes:jpg,jpeg,png,gif,webp,pdf,csv,txt,log'],
         ]);
+
+        $hasFile = $request->hasFile('attachment');
+        $content = trim($request->content ?? '');
+
+        // Refuser si ni texte ni fichier
+        if (empty($content) && ! $hasFile) {
+            return back()->withErrors(['content' => 'Veuillez saisir un message ou joindre un fichier.']);
+        }
+
+        // Fichier seul sans texte → le nom du fichier sert de contenu de la bulle
+        if (empty($content) && $hasFile) {
+            $content = $request->file('attachment')->getClientOriginalName();
+        }
+
+        $comment = $ticket->comments()->create([
+            'user_id' => $user->id,
+            'content' => $content,
+        ]);
+
+        $attachmentOriginalName = null;
+        if ($hasFile) {
+            $file = $request->file('attachment');
+            $uuid = (string) \Illuminate\Support\Str::uuid();
+            $ext  = $file->getClientOriginalExtension();
+            $path = $file->storeAs('attachments/comments', $uuid . '.' . $ext, 'local');
+            $attachmentOriginalName = $file->getClientOriginalName();
+
+            TicketAttachment::create([
+                'support_ticket_id' => $ticket->id,
+                'ticket_comment_id' => $comment->id,
+                'filename'          => $uuid . '.' . $ext,
+                'original_name'     => $attachmentOriginalName,
+                'mime_type'         => $file->getMimeType(),
+                'size'              => $file->getSize(),
+                'path'              => $path,
+            ]);
+        }
+
+        // Poster le commentaire comme followup dans GLPI pour que le technicien le voie
+        if ($ticket->glpi_ticket_id && $user->organization?->hasGlpiConfig()) {
+            $glpiContent = $content;
+            if ($attachmentOriginalName !== null) {
+                $glpiContent .= "\n\n[Pièce jointe disponible dans Zeno : {$attachmentOriginalName}]";
+            }
+            $posted = app(GlpiClientService::class)->addFollowup(
+                $user->organization,
+                (int) $ticket->glpi_ticket_id,
+                $glpiContent
+            );
+            // Invalider le cache de statut si le followup a bien été créé
+            if ($posted) {
+                Cache::forget("glpi_ticket_status_{$user->organization->id}_{$ticket->glpi_ticket_id}");
+            }
+        }
 
         return redirect()->route('support.ticket-detail', $id)
             ->with('comment_added', true);
