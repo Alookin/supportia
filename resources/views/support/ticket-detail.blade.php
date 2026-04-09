@@ -153,9 +153,19 @@
 
             {{-- ── Description structurée ─────────────────────────── --}}
             @if($ticket->ai_body)
+                @php
+                    // 1. Échapper d'abord pour neutraliser tout HTML brut
+                    $bodyHtml = e($ticket->ai_body);
+                    // 2. **texte** → <strong>texte</strong>
+                    $bodyHtml = preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $bodyHtml);
+                    // 3. - item en début de ligne → • item
+                    $bodyHtml = preg_replace('/^- /m', '• ', $bodyHtml);
+                    // 4. Sauts de ligne → <br>
+                    $bodyHtml = nl2br($bodyHtml);
+                @endphp
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                     <h2 class="text-sm font-semibold text-gray-700 mb-4">Description</h2>
-                    <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ $ticket->ai_body }}</div>
+                    <div class="text-sm text-gray-700 leading-relaxed">{!! $bodyHtml !!}</div>
                 </div>
             @endif
 
@@ -180,87 +190,113 @@
                 </div>
             @endif
 
-            {{-- ── Suivi GLPI ──────────────────────────────────────── --}}
+            {{-- ── Suivi du ticket ─────────────────────────────────── --}}
             @if($ticket->glpi_ticket_id)
-                @php
-                    $glpiStatusInt = $glpiData['glpi_status'] ?? ($ticket->glpi_status ? (int) $ticket->glpi_status : 0);
-                    $glpiStatusConfig = match($glpiStatusInt) {
-                        1       => ['label' => 'Nouveau',          'class' => 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',      'dot' => 'bg-gray-400'],
-                        2       => ['label' => 'En cours',         'class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',       'dot' => 'bg-blue-500'],
-                        3       => ['label' => 'En cours (assigné)','class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',      'dot' => 'bg-blue-500'],
-                        4       => ['label' => 'En attente',       'class' => 'bg-orange-50 text-orange-700 ring-1 ring-orange-200', 'dot' => 'bg-orange-400'],
-                        5       => ['label' => 'Résolu',           'class' => 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200','dot' => 'bg-emerald-500'],
-                        6       => ['label' => 'Clos',             'class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-300',      'dot' => 'bg-gray-500'],
-                        default => ['label' => 'Dans GLPI',        'class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-200',      'dot' => 'bg-gray-400'],
-                    };
-                    $solveDate = ! empty($glpiData['solve_date']) && $glpiData['solve_date'] !== '0000-00-00 00:00:00'
-                        ? \Illuminate\Support\Carbon::parse($glpiData['solve_date'])->setTimezone('Europe/Paris')
-                        : null;
-                    $followups = $glpiData['followups'] ?? [];
-                @endphp
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                    <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-sm font-semibold text-gray-700">Suivi GLPI</h2>
-                        <div class="flex items-center gap-3">
-                            @if($glpiStatusInt > 0)
-                                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium {{ $glpiStatusConfig['class'] }}">
-                                    <span class="w-1.5 h-1.5 rounded-full {{ $glpiStatusConfig['dot'] }}"></span>
-                                    {{ $glpiStatusConfig['label'] }}
-                                </span>
-                            @endif
-                            <a href="{{ str_replace('/apirest.php', '', rtrim($ticket->organization?->glpi_api_url ?? '', '/')) }}/front/ticket.form.php?id={{ $ticket->glpi_ticket_id }}"
-                               target="_blank"
-                               class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 transition-colors">
-                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                                </svg>
-                                Ticket #{{ $ticket->glpi_ticket_id }}
-                            </a>
-                        </div>
+                @if($glpiStatus === null)
+                    {{-- GLPI indisponible --}}
+                    <div class="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-700">
+                        <svg class="w-4 h-4 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                        Suivi temporairement indisponible — GLPI ne répond pas.
+                        <a href="{{ str_replace('/apirest.php', '', rtrim($ticket->organization?->glpi_api_url ?? '', '/')) }}/front/ticket.form.php?id={{ $ticket->glpi_ticket_id }}"
+                           target="_blank" class="ml-auto text-xs text-amber-600 underline hover:text-amber-800">
+                            Ouvrir dans GLPI
+                        </a>
                     </div>
+                @else
+                    @php
+                        $glpiStatusConfig = match($glpiStatus['status']) {
+                            1 => ['class' => 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',        'dot' => 'bg-gray-400'],
+                            2 => ['class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',          'dot' => 'bg-blue-500'],
+                            3 => ['class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',          'dot' => 'bg-blue-500'],
+                            4 => ['class' => 'bg-orange-50 text-orange-700 ring-1 ring-orange-200',    'dot' => 'bg-orange-400'],
+                            5 => ['class' => 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
+                            6 => ['class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-300',         'dot' => 'bg-gray-500'],
+                            default => ['class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-200',   'dot' => 'bg-gray-400'],
+                        };
+                        $resolutionDate = ! empty($glpiStatus['resolution_date'])
+                            ? \Illuminate\Support\Carbon::parse($glpiStatus['resolution_date'])->setTimezone('Europe/Paris')
+                            : null;
+                    @endphp
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
 
-                    @if($solveDate)
-                        <p class="text-xs text-gray-400 mb-4">
-                            Résolu le {{ $solveDate->translatedFormat('d F Y à H:i') }}
-                        </p>
-                    @endif
-
-                    @if(empty($followups))
-                        @if(empty($glpiData))
-                            <p class="text-sm text-gray-400">Impossible de récupérer les suivis GLPI pour le moment.</p>
-                        @else
-                            <p class="text-sm text-gray-400">Aucun suivi pour ce ticket dans GLPI.</p>
-                        @endif
-                    @else
-                        <div class="space-y-4">
-                            @foreach($followups as $fu)
-                                @php
-                                    $fuDate = ! empty($fu['date']) && $fu['date'] !== '0000-00-00 00:00:00'
-                                        ? \Illuminate\Support\Carbon::parse($fu['date'])->setTimezone('Europe/Paris')
-                                        : null;
-                                @endphp
-                                <div class="flex gap-3">
-                                    <div class="shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                                        <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M11.35 3.836c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m8.9-4.414c.376.023.75.05 1.124.08 1.131.094 1.976 1.057 1.976 2.192V16.5A2.25 2.25 0 0118 18.75h-2.25m-7.5-10.5H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V18.75m-7.5-10.5h6.375c.621 0 1.125.504 1.125 1.125v9.375m-8.25-3l1.5 1.5 3-3.75" />
-                                        </svg>
-                                    </div>
-                                    <div class="flex-1 min-w-0">
-                                        <div class="flex items-baseline gap-2 mb-1">
-                                            <span class="text-xs font-semibold text-indigo-600">Technicien</span>
-                                            @if($fuDate)
-                                                <span class="text-xs text-gray-400">
-                                                    {{ $fuDate->translatedFormat('d F Y à H:i') }}
-                                                </span>
-                                            @endif
-                                        </div>
-                                        <div class="text-sm text-gray-700 whitespace-pre-wrap bg-indigo-50/50 rounded-lg px-3 py-2 border border-indigo-100/60">{{ $fu['content'] }}</div>
-                                    </div>
-                                </div>
-                            @endforeach
+                        {{-- En-tête : titre + badge statut + lien GLPI --}}
+                        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                            <h2 class="text-sm font-semibold text-gray-700">Suivi du ticket</h2>
+                            <div class="flex items-center gap-3">
+                                @if($glpiStatus['status'] > 0)
+                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium {{ $glpiStatusConfig['class'] }}">
+                                        <span class="w-1.5 h-1.5 rounded-full {{ $glpiStatusConfig['dot'] }}"></span>
+                                        {{ $glpiStatus['status_label'] }}
+                                    </span>
+                                @endif
+                                <a href="{{ str_replace('/apirest.php', '', rtrim($ticket->organization?->glpi_api_url ?? '', '/')) }}/front/ticket.form.php?id={{ $ticket->glpi_ticket_id }}"
+                                   target="_blank"
+                                   class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 transition-colors">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                                    </svg>
+                                    Ticket #{{ $ticket->glpi_ticket_id }}
+                                </a>
+                            </div>
                         </div>
-                    @endif
-                </div>
+
+                        {{-- Méta : technicien + date résolution --}}
+                        @if($glpiStatus['assigned_to'] || $resolutionDate)
+                            <div class="flex flex-wrap gap-x-6 gap-y-1 mb-4 text-xs text-gray-500">
+                                @if($glpiStatus['assigned_to'])
+                                    <span>
+                                        <span class="font-semibold text-gray-400 uppercase tracking-wider">Technicien</span>
+                                        &nbsp;{{ $glpiStatus['assigned_to'] }}
+                                    </span>
+                                @endif
+                                @if($resolutionDate)
+                                    <span>
+                                        <span class="font-semibold text-gray-400 uppercase tracking-wider">Résolu le</span>
+                                        &nbsp;{{ $resolutionDate->translatedFormat('d F Y à H:i') }}
+                                    </span>
+                                @endif
+                            </div>
+                        @endif
+
+                        {{-- Fil des followups --}}
+                        @if(empty($glpiStatus['followups']))
+                            <p class="text-sm text-gray-400">Aucune réponse pour le moment.</p>
+                        @else
+                            <div class="space-y-4">
+                                @foreach($glpiStatus['followups'] as $fu)
+                                    @php
+                                        $fuDate = ! empty($fu['date']) && $fu['date'] !== '0000-00-00 00:00:00'
+                                            ? \Illuminate\Support\Carbon::parse($fu['date'])->setTimezone('Europe/Paris')
+                                            : null;
+                                        $fuAuthor  = $fu['author'] ?? null;
+                                        $fuInitial = $fuAuthor ? strtoupper(mb_substr($fuAuthor, 0, 1)) : '?';
+                                    @endphp
+                                    <div class="flex gap-3">
+                                        <div class="shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                                            <span class="text-xs font-bold text-indigo-600">{{ $fuInitial }}</span>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex flex-wrap items-baseline gap-2 mb-1">
+                                                <span class="text-xs font-semibold text-indigo-600">
+                                                    {{ $fuAuthor ?? 'Technicien' }}
+                                                </span>
+                                                @if($fuDate)
+                                                    <span class="text-xs text-gray-400">
+                                                        {{ $fuDate->translatedFormat('d F Y à H:i') }}
+                                                    </span>
+                                                @endif
+                                            </div>
+                                            <div class="text-sm text-gray-700 whitespace-pre-wrap bg-indigo-50/50 rounded-lg px-3 py-2 border border-indigo-100/60">{{ $fu['content'] }}</div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+
+                    </div>
+                @endif
             @endif
 
             {{-- ── Description originale ──────────────────────────── --}}

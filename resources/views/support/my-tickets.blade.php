@@ -64,11 +64,25 @@
                     {{-- Filter tabs --}}
                     <div class="flex items-center gap-1">
                         @php
+                            // Groupe de filtre pour chaque ticket
+                            // en_cours  : statut GLPI 1-3 (actif), ou créé sans info GLPI
+                            // resolu    : statut GLPI 5-6, ou status local resolved/closed
+                            // attente   : statut GLPI 4, ou status local pending/queued
+                            $glpiFilterGroup = fn($t) => match(true) {
+                                in_array((int)$t->glpi_status, [5, 6], true)         => 'resolu',
+                                in_array($t->status, ['resolved', 'closed'], true)   => 'resolu',
+                                (int)$t->glpi_status === 4                            => 'attente',
+                                in_array($t->status, ['pending', 'queued'], true)    => 'attente',
+                                in_array((int)$t->glpi_status, [1, 2, 3], true)      => 'en_cours',
+                                $t->status === 'created'                              => 'en_cours',
+                                default                                               => 'other',
+                            };
+
                             $filterTabs = [
-                                'all'     => ['label' => 'Tous',        'count' => $tickets->count()],
-                                'created' => ['label' => 'Dans GLPI',   'count' => $tickets->where('status', 'created')->count()],
-                                'pending' => ['label' => 'En attente',  'count' => $tickets->whereIn('status', ['pending', 'queued'])->count()],
-                                'failed'  => ['label' => 'Échec',       'count' => $tickets->where('status', 'failed')->count()],
+                                'all'      => ['label' => 'Tous',       'count' => $tickets->count()],
+                                'en_cours' => ['label' => 'En cours',   'count' => $tickets->filter(fn($t) => $glpiFilterGroup($t) === 'en_cours')->count()],
+                                'resolu'   => ['label' => 'Résolus',    'count' => $tickets->filter(fn($t) => $glpiFilterGroup($t) === 'resolu')->count()],
+                                'attente'  => ['label' => 'En attente', 'count' => $tickets->filter(fn($t) => $glpiFilterGroup($t) === 'attente')->count()],
                             ];
                         @endphp
                         @foreach($filterTabs as $key => $tab)
@@ -136,34 +150,32 @@
                                             default => ['label' => '—',    'class' => 'bg-gray-100 text-gray-400'],
                                         };
 
-                                        // GLPI status (if synced) overrides internal status label for created tickets
+                                        // Badge statut : priorité au statut GLPI synchronisé
                                         $glpiStatusInt = $ticket->glpi_status ? (int) $ticket->glpi_status : 0;
-                                        if ($ticket->status === 'created' && $glpiStatusInt > 0) {
-                                            $statusConfig = match($glpiStatusInt) {
-                                                1 => ['label' => 'Nouveau',           'class' => 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',       'dot' => 'bg-gray-400'],
-                                                2 => ['label' => 'En cours',          'class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',        'dot' => 'bg-blue-500'],
-                                                3 => ['label' => 'En cours',          'class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',        'dot' => 'bg-blue-500'],
-                                                4 => ['label' => 'En attente',        'class' => 'bg-orange-50 text-orange-700 ring-1 ring-orange-200',  'dot' => 'bg-orange-400'],
-                                                5 => ['label' => 'Résolu',            'class' => 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200','dot' => 'bg-emerald-500'],
-                                                6 => ['label' => 'Clos',              'class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-300',       'dot' => 'bg-gray-500'],
-                                                default => ['label' => 'Dans GLPI',   'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200','dot' => 'bg-emerald-500'],
-                                            };
-                                        } else {
-                                            $statusConfig = match($ticket->status) {
-                                                'created' => ['label' => 'Dans GLPI',  'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
-                                                'pending' => ['label' => 'En attente', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
-                                                'queued'  => ['label' => 'En file',    'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',         'dot' => 'bg-blue-400'],
-                                                'failed'  => ['label' => 'Échec',      'class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',            'dot' => 'bg-red-500'],
-                                                default   => ['label' => $ticket->status ?? '—', 'class' => 'bg-gray-100 text-gray-500',                   'dot' => 'bg-gray-300'],
-                                            };
-                                        }
+                                        $statusConfig = match(true) {
+                                            $glpiStatusInt === 1 => ['label' => 'Nouveau',           'class' => 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',        'dot' => 'bg-gray-400'],
+                                            $glpiStatusInt === 2 => ['label' => 'En cours (assigné)', 'class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',         'dot' => 'bg-blue-500'],
+                                            $glpiStatusInt === 3 => ['label' => 'En cours (planifié)','class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',         'dot' => 'bg-blue-500'],
+                                            $glpiStatusInt === 4 => ['label' => 'En attente',         'class' => 'bg-orange-50 text-orange-700 ring-1 ring-orange-200',   'dot' => 'bg-orange-400'],
+                                            $glpiStatusInt === 5 => ['label' => 'Résolu',             'class' => 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200','dot' => 'bg-emerald-500'],
+                                            $glpiStatusInt === 6 => ['label' => 'Fermé',              'class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-300',        'dot' => 'bg-gray-500'],
+                                            in_array($ticket->status, ['resolved','closed'], true) => ['label' => 'Résolu', 'class' => 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
+                                            $ticket->status === 'created' => ['label' => 'Dans GLPI',  'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200','dot' => 'bg-emerald-500'],
+                                            $ticket->status === 'pending' => ['label' => 'En attente', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
+                                            $ticket->status === 'queued'  => ['label' => 'En file',    'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',         'dot' => 'bg-blue-400'],
+                                            $ticket->status === 'failed'  => ['label' => 'Échec',      'class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',            'dot' => 'bg-red-500'],
+                                            default                       => ['label' => $ticket->status ?? '—', 'class' => 'bg-gray-100 text-gray-500', 'dot' => 'bg-gray-300'],
+                                        };
 
-                                        // Alpine filter group for this row
-                                        $filterGroup = match($ticket->status) {
-                                            'created'          => 'created',
-                                            'pending','queued' => 'pending',
-                                            'failed'           => 'failed',
-                                            default            => 'other',
+                                        // Groupe pour x-show Alpine (même logique que les onglets)
+                                        $filterGroup = match(true) {
+                                            in_array($glpiStatusInt, [5, 6], true)                    => 'resolu',
+                                            in_array($ticket->status, ['resolved','closed'], true)    => 'resolu',
+                                            $glpiStatusInt === 4                                       => 'attente',
+                                            in_array($ticket->status, ['pending','queued'], true)     => 'attente',
+                                            in_array($glpiStatusInt, [1, 2, 3], true)                 => 'en_cours',
+                                            $ticket->status === 'created'                              => 'en_cours',
+                                            default                                                    => 'other',
                                         };
                                     @endphp
                                     <tr class="hover:bg-indigo-50/40 transition-colors cursor-pointer"

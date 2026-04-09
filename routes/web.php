@@ -45,6 +45,6 @@ Route::middleware(['auth'])->prefix('support')->group(function () {
     Route::get('/demo', fn() => view('support.demo'))->name('support.demo');
 
     Route::get('/tickets', [SupportTicketController::class, 'index']);
-    Route::post('/tickets', [SupportTicketController::class, 'store']);
-    Route::post('/tickets/{ticket}/confirm', [SupportTicketController::class, 'confirm']);
+    Route::post('/tickets', [SupportTicketController::class, 'store'])->middleware('throttle:20,1');
+    Route::post('/tickets/{ticket}/confirm', [SupportTicketController::class, 'confirm'])->middleware('throttle:20,1');
 });

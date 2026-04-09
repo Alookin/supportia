@@ -9,6 +9,7 @@ use App\Services\GlpiClientService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 class SupportDashboardController extends Controller
@@ -195,18 +196,37 @@ class SupportDashboardController extends Controller
             ? SupportTicket::estimateResolutionHours($orgId, $ticket->ai_category_slug)
             : ['hours' => null, 'count' => 0];
 
-        $glpiData = [];
-        if ($ticket->glpi_ticket_id && $user->organization?->hasGlpiConfig()) {
-            $glpiData = app(GlpiClientService::class)
-                ->getTicketDetails($user->organization, $ticket->glpi_ticket_id);
+        // Données GLPI temps réel (null = indisponible)
+        $glpiStatus = null;
+        $glpiTicketId = $ticket->glpi_ticket_id ? (int) $ticket->glpi_ticket_id : null;
 
-            if (! empty($glpiData['glpi_status'])) {
-                $ticket->update(['glpi_status' => $glpiData['glpi_status']]);
+        Log::debug('[Ticket detail] glpi_ticket_id', [
+            'ticket_id'      => $ticket->id,
+            'glpi_ticket_id' => $glpiTicketId,
+            'has_glpi_config' => (bool) $user->organization?->hasGlpiConfig(),
+        ]);
+
+        if ($glpiTicketId && $user->organization?->hasGlpiConfig()) {
+            $glpiStatus = app(GlpiClientService::class)
+                ->getTicketStatus($user->organization, $glpiTicketId);
+
+            if ($glpiStatus !== null) {
+                $glpiStatusInt = $glpiStatus['status'];
+
+                // Synchronise glpi_status en base
+                $updates = ['glpi_status' => $glpiStatusInt];
+
+                // Propage le statut GLPI vers le statut local lisible dans my-tickets
+                if (in_array($glpiStatusInt, [5, 6], true) && $ticket->status === 'created') {
+                    $updates['status'] = $glpiStatusInt === 6 ? 'closed' : 'resolved';
+                }
+
+                $ticket->update($updates);
                 $ticket->refresh();
             }
         }
 
-        return view('support.ticket-detail', compact('ticket', 'categoryLabel', 'estimate', 'glpiData'));
+        return view('support.ticket-detail', compact('ticket', 'categoryLabel', 'estimate', 'glpiStatus'));
     }
 
     public function addComment(Request $request, int $id): RedirectResponse

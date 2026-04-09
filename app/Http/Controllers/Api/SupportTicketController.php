@@ -161,7 +161,12 @@ class SupportTicketController extends Controller
         $validated = $request->validate([
             'title'         => 'nullable|string|max:500',
             'body'          => 'nullable|string|max:10000',
-            'category_slug' => 'nullable|string|max:100',
+            'category_slug' => [
+                'nullable', 'string', 'max:100',
+                \Illuminate\Validation\Rule::in(
+                    $ticket->organization->activeCategories()->pluck('slug')->push('autre')->all()
+                ),
+            ],
             'priority'      => 'nullable|integer|min:1|max:5',
         ]);
 

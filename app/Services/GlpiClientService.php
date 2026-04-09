@@ -83,12 +83,14 @@ class GlpiClientService
         $data = $this->parseFirstJson($response->body());
 
         if (empty($data)) {
-            throw new \RuntimeException('GLPI retourne une réponse invalide : ' . $response->body());
+            throw new \RuntimeException(
+                'GLPI retourne une réponse invalide (HTTP ' . $response->status() . ')'
+            );
         }
 
         $ticketId = $data['id']
             ?? throw new \RuntimeException(
-                'GLPI ne retourne pas d\'ID ticket : ' . json_encode($data)
+                'GLPI ne retourne pas d\'ID ticket (HTTP ' . $response->status() . ')'
             );
 
         return [
@@ -98,82 +100,197 @@ class GlpiClientService
     }
 
     /**
-     * Récupère le statut et les suivis d'un ticket GLPI.
+     * Récupère le statut temps réel d'un ticket GLPI : statut, technicien, followups.
      *
-     * @return array{glpi_status: int, solve_date: string|null, followups: array}
+     * Retourne null si GLPI est indisponible (sans lever d'exception).
+     * Les résultats sont mis en cache 2 min ; les échecs ne sont pas cachés
+     * pour permettre un retry immédiat dès que GLPI revient.
+     *
+     * @return array{status: int, status_label: string, assigned_to: string|null, resolution_date: string|null, followups: list<array{date: string|null, author: string|null, content: string}>}|null
      */
-    public function getTicketDetails(Organization $organization, int $glpiTicketId): array
+    public function getTicketStatus(Organization $organization, int $glpiTicketId): ?array
     {
         if (! $organization->hasGlpiConfig()) {
-            return [];
+            return null;
         }
 
-        $cacheKey = "glpi_ticket_details_{$organization->id}_{$glpiTicketId}";
+        $cacheKey = "glpi_ticket_status_{$organization->id}_{$glpiTicketId}";
 
-        return Cache::remember($cacheKey, 120, function () use ($organization, $glpiTicketId) {
-            try {
-                $sessionToken = $this->getSessionToken($organization);
+        $cached = Cache::get($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
 
-                // GET /Ticket/{id}
-                $ticketResp = $this->http()
-                    ->withHeaders($this->headers($organization, $sessionToken))
-                    ->get($this->url($organization, "/Ticket/{$glpiTicketId}"));
+        try {
+            Log::debug('[GLPI Status] Starting', ['glpi_ticket_id' => $glpiTicketId]);
 
-                if ($ticketResp->status() === 401) {
-                    $this->clearSessionToken($organization);
-                    $sessionToken = $this->getSessionToken($organization);
-                    $ticketResp = $this->http()
-                        ->withHeaders($this->headers($organization, $sessionToken))
-                        ->get($this->url($organization, "/Ticket/{$glpiTicketId}"));
-                }
+            $sessionToken = $this->getSessionToken($organization);
 
-                if ($ticketResp->failed()) {
-                    return [];
-                }
+            Log::debug('[GLPI Status] Session', ['token' => $sessionToken ? 'ok' : 'null']);
 
-                $ticketData = $ticketResp->json();
-
-                // GET /Ticket/{id}/ITILFollowup
-                $fuResp = $this->http()
-                    ->withHeaders($this->headers($organization, $sessionToken))
-                    ->get($this->url($organization, "/Ticket/{$glpiTicketId}/ITILFollowup"), [
-                        'range' => '0-19',
-                    ]);
-
-                $followups = [];
-                if ($fuResp->ok()) {
-                    $raw = $fuResp->json();
-                    if (is_array($raw)) {
-                        foreach ($raw as $fu) {
-                            if (! is_array($fu)) {
-                                continue;
-                            }
-                            $content = strip_tags($fu['content'] ?? '');
-                            if (empty(trim($content))) {
-                                continue;
-                            }
-                            $followups[] = [
-                                'date'    => $fu['date'] ?? $fu['date_creation'] ?? null,
-                                'content' => $content,
-                            ];
-                        }
-                    }
-                }
-
-                return [
-                    'glpi_status' => (int) ($ticketData['status'] ?? 0),
-                    'solve_date'  => $ticketData['solvedate'] ?? $ticketData['closedate'] ?? null,
-                    'followups'   => $followups,
-                ];
-            } catch (\Throwable $e) {
-                Log::warning('[GLPI] getTicketDetails failed', [
-                    'glpi_ticket_id' => $glpiTicketId,
-                    'error'          => $e->getMessage(),
+            // GET /Ticket/{id}?expand_dropdowns=true → statut + technicien en clair
+            $ticketResp = $this->http()
+                ->withHeaders($this->headers($organization, $sessionToken))
+                ->get($this->url($organization, "/Ticket/{$glpiTicketId}"), [
+                    'expand_dropdowns' => true,
                 ]);
 
-                return [];
+            Log::debug('[GLPI Status] Ticket response', [
+                'status'    => $ticketResp->status(),
+                'has_id'    => isset($ticketResp->json()['id']),
+                'body_size' => strlen($ticketResp->body()),
+            ]);
+
+            if ($ticketResp->status() === 401) {
+                $this->clearSessionToken($organization);
+                $sessionToken = $this->getSessionToken($organization);
+                $ticketResp   = $this->http()
+                    ->withHeaders($this->headers($organization, $sessionToken))
+                    ->get($this->url($organization, "/Ticket/{$glpiTicketId}"), [
+                        'expand_dropdowns' => true,
+                    ]);
+
+                Log::debug('[GLPI Status] Ticket response (retry after 401)', [
+                    'status'  => $ticketResp->status(),
+                    'has_id'  => isset($ticketResp->json()['id']),
+                ]);
             }
-        });
+
+            // Le body GLPI peut contenir des blocs JSON concaténés après les données du ticket.
+            // On extrait le premier objet JSON complet en suivant la profondeur des accolades.
+            $body = $ticketResp->body();
+            $firstBrace = strpos($body, '{');
+            if ($firstBrace === false) {
+                Log::warning('[GLPI Status] No JSON object in body', ['status' => $ticketResp->status()]);
+                return null;
+            }
+            $depth = 0;
+            $end   = $firstBrace;
+            for ($i = $firstBrace, $len = strlen($body); $i < $len; $i++) {
+                if ($body[$i] === '{') {
+                    $depth++;
+                } elseif ($body[$i] === '}') {
+                    $depth--;
+                    if ($depth === 0) {
+                        $end = $i;
+                        break;
+                    }
+                }
+            }
+            $ticketData = json_decode(substr($body, $firstBrace, $end - $firstBrace + 1), true);
+
+            Log::debug('[GLPI Status] Parsed ticket', [
+                'has_id' => isset($ticketData['id']),
+                'keys'   => array_keys($ticketData ?? []),
+            ]);
+
+            if (! isset($ticketData['id'])) {
+                Log::warning('[GLPI Status] Invalid ticket response', ['status' => $ticketResp->status()]);
+                return null;
+            }
+
+            $statusInt = (int) ($ticketData['status'] ?? 0);
+
+            $statusLabel = match($statusInt) {
+                1 => 'Nouveau',
+                2 => 'En cours (assigné)',
+                3 => 'En cours (planifié)',
+                4 => 'En attente',
+                5 => 'Résolu',
+                6 => 'Fermé',
+                default => 'Inconnu',
+            };
+
+            // Date de résolution / fermeture
+            $resolutionDate = null;
+            foreach (['solvedate', 'closedate'] as $field) {
+                $v = $ticketData[$field] ?? null;
+                if ($v && $v !== '0000-00-00 00:00:00') {
+                    $resolutionDate = $v;
+                    break;
+                }
+            }
+
+            // Technicien assigné : GET /Ticket/{id}/User?searchText[type]=2
+            $assignedTo = null;
+            $userResp = $this->http()
+                ->withHeaders($this->headers($organization, $sessionToken))
+                ->get($this->url($organization, "/Ticket/{$glpiTicketId}/User"), [
+                    'searchText[type]'  => 2,
+                    'expand_dropdowns'  => true,
+                    'range'             => '0-0',
+                ]);
+
+            if ($userResp->ok()) {
+                $users = $userResp->json();
+                if (is_array($users) && ! empty($users)) {
+                    $first = reset($users);
+                    $name  = $first['users_id'] ?? $first['name'] ?? null;
+                    if (is_string($name) && ! is_numeric($name) && ! empty($name)) {
+                        $assignedTo = $name;
+                    }
+                }
+            }
+
+            // Followups : GET /ITILFollowup?searchText[tickets_id]={id}
+            // forcedisplay : 2=id, 4=date, 5=content (les sous-ressources /Ticket/{id}/ITILFollowup retournent 405)
+            $fuResp = $this->http()
+                ->withHeaders($this->headers($organization, $sessionToken))
+                ->get($this->url($organization, '/ITILFollowup'), [
+                    'searchText[tickets_id]' => $glpiTicketId,
+                    'forcedisplay[0]'        => 2,   // id
+                    'forcedisplay[1]'        => 4,   // date
+                    'forcedisplay[2]'        => 5,   // content
+                    'range'                  => '0-19',
+                ]);
+
+            Log::debug('[GLPI Status] Followups response', [
+                'status'    => $fuResp->status(),
+                'count'     => count(($fuResp->json()['data'] ?? [])),
+                'body_size' => strlen($fuResp->body()),
+            ]);
+
+            $followups = [];
+            if ($fuResp->ok()) {
+                $fuData = $fuResp->json();
+                $rows   = $fuData['data'] ?? (is_array($fuData) ? $fuData : []);
+                foreach ($rows as $fu) {
+                    if (! is_array($fu)) {
+                        continue;
+                    }
+                    // forcedisplay retourne les champs par numéro : 4=date, 5=content
+                    $content = strip_tags($fu['5'] ?? $fu['content'] ?? '');
+                    if (empty(trim($content))) {
+                        continue;
+                    }
+                    $followups[] = [
+                        'date'    => $fu['4'] ?? $fu['date'] ?? null,
+                        'author'  => null, // non disponible sans lookup supplémentaire
+                        'content' => $content,
+                    ];
+                }
+            }
+
+            $result = [
+                'status'          => $statusInt,
+                'status_label'    => $statusLabel,
+                'assigned_to'     => $assignedTo,
+                'resolution_date' => $resolutionDate,
+                'followups'       => $followups,
+            ];
+
+            Cache::put($cacheKey, $result, 120);
+
+            return $result;
+        } catch (\Throwable $e) {
+            Log::debug('[GLPI Status] Error', ['message' => $e->getMessage()]);
+            Log::warning('[GLPI] getTicketStatus failed', [
+                'glpi_ticket_id' => $glpiTicketId,
+                'error'          => $e->getMessage(),
+            ]);
+
+            return null; // pas mis en cache → retry immédiat au prochain chargement
+        }
     }
 
     /**
