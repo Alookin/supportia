@@ -184,10 +184,10 @@ class SupportDashboardController extends Controller
         $user  = $request->user();
         $orgId = $user->organization?->id;
 
-        $ticket = SupportTicket::where('id', $id)
-            ->where('organization_id', $orgId)
-            ->with(['user:id,name', 'comments.user:id,name', 'comments.attachment', 'attachments'])
-            ->firstOrFail();
+        $ticket = SupportTicket::with(['user:id,name', 'comments.user:id,name', 'comments.attachment', 'attachments'])
+            ->findOrFail($id);
+
+        $this->authorize('view', $ticket);
 
         $categoryLabel = $orgId
             ? (GlpiCategoryMap::where('organization_id', $orgId)
@@ -234,12 +234,10 @@ class SupportDashboardController extends Controller
 
     public function addComment(Request $request, int $id): RedirectResponse
     {
-        $user  = $request->user();
-        $orgId = $user->organization?->id;
+        $user   = $request->user();
+        $ticket = SupportTicket::findOrFail($id);
 
-        $ticket = SupportTicket::where('id', $id)
-            ->where('organization_id', $orgId)
-            ->firstOrFail();
+        $this->authorize('addComment', $ticket);
 
         $request->validate([
             'content'    => ['nullable', 'string', 'max:2000'],

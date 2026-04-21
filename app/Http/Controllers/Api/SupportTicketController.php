@@ -8,6 +8,7 @@ use App\Services\AIClassifierService;
 use App\Services\GlpiClientService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -60,12 +61,6 @@ class SupportTicketController extends Controller
         $user = $request->user();
         $organization = $user->organization;
 
-        if (! $organization?->is_active) {
-            return response()->json([
-                'error' => 'Aucune organisation active associée à votre compte.',
-            ], 403);
-        }
-
         // 1. Parser les clients
         $isSpecificClient = ($request->input('is_specific_client') == '1');
         $clientIds = null;
@@ -90,22 +85,35 @@ class SupportTicketController extends Controller
             ], 422);
         }
 
-        // 3. Créer le ticket local (traçabilité avant tout)
-        $ticket = SupportTicket::create([
-            'organization_id' => $organization->id,
-            'user_id'         => $user->id,
-            'client_ids'      => $clientIds,
-            'client_name'     => $clientName,
-            'raw_description' => $validated['description'],
-            'status'          => 'pending',
-        ]);
+        // 3. Classification IA (hors transaction — appel HTTP)
+        $classification = $this->classifier->classify(
+            $organization,
+            $validated['description'],
+            $clientName,
+        );
 
-        // 4. Stocker les pièces jointes dans le disque privé (storage/app/private)
-        if ($request->hasFile('attachments')) {
-            foreach ($request->file('attachments') as $file) {
-                if (! $file || ! $file->isValid()) {
-                    continue;
-                }
+        // 4. Créer le ticket et ses pièces jointes en une opération atomique
+        $uploadedFiles = $request->hasFile('attachments')
+            ? array_filter($request->file('attachments'), fn ($f) => $f && $f->isValid())
+            : [];
+
+        $ticket = DB::transaction(function () use ($organization, $user, $validated, $clientIds, $clientName, $classification, $uploadedFiles) {
+            $ticket = SupportTicket::create([
+                'organization_id'  => $organization->id,
+                'user_id'          => $user->id,
+                'client_ids'       => $clientIds,
+                'client_name'      => $clientName,
+                'raw_description'  => $validated['description'],
+                'ai_title'         => $classification['title'],
+                'ai_body'          => $classification['body'],
+                'ai_category_slug' => $classification['category_slug'],
+                'ai_priority'      => $classification['priority'],
+                'ai_confidence'    => $classification['confidence'],
+                'ai_provider'      => $classification['provider'],
+                'status'           => 'pending',
+            ]);
+
+            foreach ($uploadedFiles as $file) {
                 $ext      = strtolower($file->getClientOriginalExtension());
                 $filename = Str::uuid()->toString() . ($ext ? ".{$ext}" : '');
                 $path     = $file->storeAs("attachments/{$ticket->id}", $filename, 'local');
@@ -118,34 +126,18 @@ class SupportTicketController extends Controller
                     'path'          => $path,
                 ]);
             }
-        }
 
-        // 5. Classification IA
-        $classification = $this->classifier->classify(
-            $organization,
-            $validated['description'],
-            $clientName,
-            $ticket,
-        );
+            return $ticket;
+        });
 
-        // 6. Mettre à jour le ticket avec les résultats IA
-        $ticket->update([
-            'ai_title'         => $classification['title'],
-            'ai_body'          => $classification['body'],
-            'ai_category_slug' => $classification['category_slug'],
-            'ai_priority'      => $classification['priority'],
-            'ai_confidence'    => $classification['confidence'],
-            'ai_provider'      => $classification['provider'],
-        ]);
-
-        // 7. Si confiance suffisante → création directe dans GLPI
+        // 5. Si confiance suffisante → création directe dans GLPI
         $threshold = config('supportia.confidence_threshold', 0.7);
 
         if ($classification['confidence'] >= $threshold) {
             return $this->createInGlpi($organization, $ticket, $classification, $user);
         }
 
-        // 8. Confiance trop basse → retourner la suggestion pour validation
+        // 6. Confiance trop basse → retourner la suggestion pour validation
         return response()->json([
             'status'     => 'needs_review',
             'ticket_id'  => $ticket->id,
@@ -173,9 +165,7 @@ class SupportTicketController extends Controller
     {
         $user = $request->user();
 
-        if ($ticket->organization_id !== $user->organization_id) {
-            return response()->json(['error' => 'Non autorisé.'], 403);
-        }
+        $this->authorize('confirm', $ticket);
 
         if ($ticket->glpi_ticket_id) {
             return response()->json(['error' => 'Ce ticket a déjà été créé dans GLPI.'], 409);

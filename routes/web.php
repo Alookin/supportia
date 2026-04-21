@@ -32,7 +32,7 @@ Route::middleware('auth')->group(function () {
 
 require __DIR__.'/auth.php';
 
-Route::middleware(['auth'])->prefix('support')->group(function () {
+Route::middleware(['auth', 'org.active'])->prefix('support')->group(function () {
     Route::get('/', function () {
         $categories = auth()->user()->organization?->activeCategories()->get() ?? collect();
         return view('support.create', compact('categories'));
