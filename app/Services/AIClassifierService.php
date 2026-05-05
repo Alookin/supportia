@@ -172,6 +172,7 @@ PROMPT;
         }
 
         $response = Http::timeout(config('supportia.ai_timeout', 5))
+            ->when(! config('supportia.claude_verify_ssl', true), fn ($h) => $h->withoutVerifying())
             ->withHeaders([
                 'x-api-key'         => $apiKey,
                 'anthropic-version' => '2023-06-01',

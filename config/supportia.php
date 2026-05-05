@@ -10,6 +10,7 @@ return [
     'claude_api_key' => env('CLAUDE_API_KEY'),
     'claude_model' => env('CLAUDE_MODEL', 'claude-sonnet-4-20250514'),
     'ai_timeout' => (int) env('SUPPORTIA_AI_TIMEOUT', 5),
+    'claude_verify_ssl' => env('CLAUDE_VERIFY_SSL', true),
 
     /*
     |--------------------------------------------------------------------------
