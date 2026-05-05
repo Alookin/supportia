@@ -3,7 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\URL; // Import à ajouter tout en haut du fichier
+use Illuminate\Support\Facades\URL;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,10 +19,9 @@ class AppServiceProvider extends ServiceProvider
      * Bootstrap any application services.
      */
     public function boot(): void
-{
-    // On force le HTTPS si on est sur Ngrok
-    if (str_contains(request()->getHost(), 'ngrok-free.dev')) {
-        URL::forceScheme('https');
+    {
+        if (app()->environment('production')) {
+            URL::forceScheme('https');
+        }
     }
-}
 }
