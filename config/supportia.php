@@ -29,4 +29,40 @@ return [
     'glpi_retry_delay' => 300, // secondes entre chaque retry
     'glpi_verify_ssl' => env('GLPI_VERIFY_SSL', true),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Pièces jointes
+    |--------------------------------------------------------------------------
+    |
+    | Limites et types autorisés pour les uploads (création de tickets et
+    | commentaires). La validation serveur applique les règles Laravel
+    | "mimes:" (extension + magic bytes) ET "mimetypes:" (MIME finfo,
+    | indépendant de l'extension) — la double règle bloque les fichiers
+    | à extension trompeuse (.php renommé en .txt, etc.).
+    |
+    */
+    'attachments' => [
+        'max_size_kb' => (int) env('SUPPORTIA_ATTACHMENT_MAX_KB', 10240),
+
+        'allowed_extensions' => [
+            'jpg', 'jpeg', 'png', 'gif', 'webp',
+            'pdf',
+            'csv', 'txt', 'log',
+            'xls', 'xlsx',
+        ],
+
+        'allowed_mimetypes' => [
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'application/pdf',
+            'text/csv',
+            'text/plain',
+            'text/x-log',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ],
+    ],
+
 ];

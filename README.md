@@ -114,6 +114,9 @@ SUPPORTIA_CONFIDENCE_THRESHOLD=0.7
 
 # Timeout des appels IA en secondes
 SUPPORTIA_AI_TIMEOUT=5
+
+# Taille max des pièces jointes en KB (10240 = 10 Mo)
+SUPPORTIA_ATTACHMENT_MAX_KB=10240
 ```
 
 > Les paramètres GLPI (URL API, tokens) sont configurés **par organisation** en base de données, pas dans `.env`.
