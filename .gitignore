@@ -2,6 +2,9 @@
 .DS_Store
 .env
 .env.backup
+.env.bak
+.env.local
+.env.*.local
 .env.production
 .phpactor.json
 .phpunit.result.cache
@@ -17,6 +20,9 @@
 /public/hot
 /public/storage
 /storage/*.key
+*.key
+*.pem
+*.crt
 /storage/pail
 /storage/logs
 /storage/framework/cache
