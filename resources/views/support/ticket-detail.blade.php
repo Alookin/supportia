@@ -173,26 +173,6 @@
                 </div>
             @endif
 
-            {{-- ── Estimation temps de traitement ─────────────────── --}}
-            @if($ticket->ai_category_slug)
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                    <h2 class="text-sm font-semibold text-gray-700 mb-3">Temps de traitement estimé</h2>
-                    @if($estimate['hours'] !== null)
-                        @php
-                            $h = $estimate['hours'];
-                            $display = $h < 24
-                                ? '~' . round($h) . ' heure' . (round($h) > 1 ? 's' : '')
-                                : '~' . round($h / 24) . ' jour' . (round($h / 24) > 1 ? 's' : '');
-                        @endphp
-                        <p class="text-2xl font-bold text-indigo-600">{{ $display }}</p>
-                        <p class="mt-1 text-xs text-gray-400">
-                            Basé sur les {{ $estimate['count'] }} tickets précédents de cette catégorie
-                        </p>
-                    @else
-                        <p class="text-sm text-gray-400">Estimation non disponible — pas assez d'historique</p>
-                    @endif
-                </div>
-            @endif
 
             {{-- ── Conversation ────────────────────────────────────── --}}
             @php

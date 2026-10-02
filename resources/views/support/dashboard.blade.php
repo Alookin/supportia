@@ -149,7 +149,7 @@
             </div>
 
             {{-- ── Graphiques supplémentaires ──────────────────────── --}}
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
                 {{-- Tickets par catégorie — top 10 --}}
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
@@ -197,29 +197,6 @@
                     @endif
                 </div>
 
-                {{-- Temps moyen de résolution --}}
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                    <h3 class="text-sm font-semibold text-gray-700 mb-1">Temps moyen de résolution</h3>
-                    <p class="text-xs text-gray-400 mb-5">Tickets au statut "Créé" — de la saisie à GLPI</p>
-                    @if($resolutionTimes->isEmpty())
-                        <p class="text-sm text-gray-400 text-center py-8">Pas encore de données</p>
-                    @else
-                        <div class="space-y-3">
-                            @foreach($resolutionTimes as $item)
-                                @php $pct = round($item['avg_seconds'] / $maxResolutionSeconds * 100); @endphp
-                                <div>
-                                    <div class="flex justify-between items-baseline mb-1">
-                                        <span class="text-xs text-gray-600 truncate max-w-[65%]" title="{{ $item['label'] }}">{{ $item['label'] }}</span>
-                                        <span class="text-xs font-bold text-emerald-600 ml-1 shrink-0">{{ $item['display'] }}</span>
-                                    </div>
-                                    <div class="w-full bg-gray-100 rounded-full h-2">
-                                        <div class="bg-emerald-400 h-2 rounded-full" style="width: {{ $pct }}%"></div>
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
 
             </div>
 

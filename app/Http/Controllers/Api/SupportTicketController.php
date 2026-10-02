@@ -267,10 +267,6 @@ class SupportTicketController extends Controller
 
             $ticket->markAsCreatedInGlpi($glpiResult['id']);
 
-            $estimate = SupportTicket::estimateResolutionHours(
-                $organization->id,
-                $classification['category_slug'] ?? ''
-            );
 
             return response()->json([
                 'status'          => 'created',
@@ -281,8 +277,6 @@ class SupportTicketController extends Controller
                 'category_slug'   => $classification['category_slug'],
                 'priority'        => $classification['priority'],
                 'confidence'      => $classification['confidence'],
-                'estimate_hours'  => $estimate['hours'],
-                'estimate_count'  => $estimate['count'],
             ]);
         } catch (\Throwable $e) {
             Log::error('GLPI ticket creation failed', [
@@ -292,10 +286,6 @@ class SupportTicketController extends Controller
 
             $ticket->markAsGlpiFailed($e->getMessage());
 
-            $estimate = SupportTicket::estimateResolutionHours(
-                $organization->id,
-                $classification['category_slug'] ?? ''
-            );
 
             // Le ticket est sauvé en local, le cron retentera
             return response()->json([
@@ -305,8 +295,6 @@ class SupportTicketController extends Controller
                 'title'           => $classification['title'],
                 'category_slug'   => $classification['category_slug'],
                 'priority'        => $classification['priority'],
-                'estimate_hours'  => $estimate['hours'],
-                'estimate_count'  => $estimate['count'],
             ], 202);
         }
     }

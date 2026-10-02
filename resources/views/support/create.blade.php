@@ -227,62 +227,6 @@
             </div>
         </template>
 
-        {{-- ═══════════ RÉSULTAT (confiance haute) ═══════════ --}}
-        <template x-if="state === 'result'">
-            <div class="bg-white rounded-xl p-6 shadow-sm">
-                <div class="flex items-center gap-3 bg-green-50 rounded-lg p-3 mb-5">
-                    <span class="text-xl">✅</span>
-                    <div>
-                        <p class="font-bold text-green-800 text-sm">Ticket prêt à être créé</p>
-                        <p class="text-xs text-green-600">
-                            Confiance IA :
-                            <span x-text="Math.round(result.confidence * 100) + '%'"></span>
-                        </p>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <span class="text-xs font-semibold text-gray-400 uppercase">Titre</span>
-                    <p class="font-semibold text-gray-900 mt-1" x-text="result.title"></p>
-                </div>
-
-                <div class="flex gap-3 mb-3">
-                    <div class="flex-1">
-                        <span class="text-xs font-semibold text-gray-400 uppercase">Catégorie</span>
-                        <p class="mt-1 text-sm font-semibold text-blue-700 bg-blue-50
-                                  inline-block px-2 py-1 rounded-md"
-                           x-text="getCategoryLabel(result.category_slug)"></p>
-                    </div>
-                    <div>
-                        <span class="text-xs font-semibold text-gray-400 uppercase">Priorité</span>
-                        <p class="mt-1 text-sm font-semibold px-2 py-1 rounded-md"
-                           :class="priorityClass(result.priority)"
-                           x-text="priorityEmoji(result.priority) + ' ' + priorityLabel(result.priority)">
-                        </p>
-                    </div>
-                </div>
-
-                <div class="mb-5">
-                    <span class="text-xs font-semibold text-gray-400 uppercase">Description structurée</span>
-                    <div class="mt-1 bg-gray-50 border border-gray-100 rounded-lg p-3
-                                text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"
-                         x-text="result.body"></div>
-                </div>
-
-                <div class="flex gap-3">
-                    <button @click="confirmResult()"
-                            class="flex-1 py-3 rounded-lg font-bold text-white text-sm
-                                   bg-green-600 hover:bg-green-700 active:scale-[0.98] transition-all">
-                        Créer le ticket GLPI
-                    </button>
-                    <button @click="state = 'review'; editResult = JSON.parse(JSON.stringify(result))"
-                            class="px-4 py-3 rounded-lg font-semibold text-gray-600 text-sm
-                                   bg-gray-100 hover:bg-gray-200 transition-colors">
-                        Modifier
-                    </button>
-                </div>
-            </div>
-        </template>
 
         {{-- ═══════════ REVIEW (confiance basse ou édition) ═══════════ --}}
         <template x-if="state === 'review'">
@@ -299,7 +243,7 @@
                                : 'Modifier le ticket'"></p>
                         <p class="text-xs text-gray-500"
                            x-text="result.confidence < 0.7
-                               ? 'Confiance IA : ' + Math.round(result.confidence * 100) + '% — vérifiez avant envoi'
+                               ? 'Vérifiez la catégorie et la description avant l\'envoi'
                                : 'Ajustez les champs si nécessaire'"></p>
                     </div>
                 </div>
@@ -379,7 +323,7 @@
                 <p class="text-sm text-gray-500 mb-5"
                    x-text="glpiTicketId
                        ? 'L\'équipe support a été notifiée'
-                       : 'La création GLPI sera retentée automatiquement'">
+                       : 'Le support est momentanément injoignable : l\'envoi sera relancé automatiquement'">
                 </p>
 
                 <div class="text-left bg-gray-50 rounded-lg p-4 mb-5 text-sm space-y-2">
@@ -409,31 +353,6 @@
                     </template>
                 </div>
 
-                {{-- Estimation temps de traitement --}}
-                <div class="mb-5 rounded-lg p-4 text-sm"
-                     :class="createdData.estimate_hours !== null && createdData.estimate_hours !== undefined
-                         ? 'bg-indigo-50'
-                         : 'bg-gray-50'">
-                    <template x-if="createdData.estimate_hours !== null && createdData.estimate_hours !== undefined">
-                        <div>
-                            <p class="text-xs font-semibold uppercase tracking-wider text-indigo-400 mb-1">
-                                Temps de traitement estimé
-                            </p>
-                            <p class="text-lg font-bold text-indigo-700"
-                               x-text="estimateDisplay(createdData.estimate_hours)"></p>
-                            <p class="text-xs text-indigo-400 mt-0.5"
-                               x-text="'Basé sur les ' + createdData.estimate_count + ' tickets précédents de cette catégorie'"></p>
-                        </div>
-                    </template>
-                    <template x-if="createdData.estimate_hours === null || createdData.estimate_hours === undefined">
-                        <div>
-                            <p class="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
-                                Temps de traitement estimé
-                            </p>
-                            <p class="text-sm text-gray-400">Estimation non disponible — pas assez d'historique</p>
-                        </div>
-                    </template>
-                </div>
 
                 <template x-if="createdData.ticket_id">
                     <a :href="`/support/tickets/${createdData.ticket_id}`"
@@ -646,11 +565,6 @@ function supportForm() {
             }
         },
 
-        confirmResult() {
-            // Le ticket à haute confiance est déjà créé côté serveur
-            this.createdData = this.result;
-            this.state = 'created';
-        },
 
         async confirmEdited() {
             this.state = 'loading';
@@ -682,8 +596,6 @@ function supportForm() {
                 this.createdData = {
                     ...this.editResult,
                     ticket_id:      data.ticket_id || ticketId,
-                    estimate_hours: data.estimate_hours ?? null,
-                    estimate_count: data.estimate_count ?? 0,
                 };
                 this.glpiTicketId = data.glpi_ticket_id || null;
                 this.glpiUrl = data.glpi_url || null;
@@ -712,15 +624,6 @@ function supportForm() {
 
         // ─── Helpers ────────────────────────
 
-        estimateDisplay(hours) {
-            if (hours === null || hours === undefined) return '';
-            if (hours < 24) {
-                const h = Math.round(hours);
-                return '~' + h + ' heure' + (h > 1 ? 's' : '');
-            }
-            const d = Math.round(hours / 24);
-            return '~' + d + ' jour' + (d > 1 ? 's' : '');
-        },
 
         getCategoryLabel(slug) {
             const cat = this.categories.find(c => c.slug === slug);

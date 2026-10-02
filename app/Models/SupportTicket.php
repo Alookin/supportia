@@ -108,6 +108,10 @@ class SupportTicket extends Model
     {
         return $query->whereNull('glpi_ticket_id')
                      ->where('status', 'pending')
+                     // Seuls les tickets dont l'envoi GLPI a déjà été tenté puis a échoué.
+                     // Exclut les tickets en attente de validation (needs_review, jamais
+                     // envoyés) : un retry les pousserait dans GLPI sans validation.
+                     ->where('glpi_retry_count', '>', 0)
                      ->where('glpi_retry_count', '<', config('supportia.glpi_retry_attempts', 3))
                      ->whereNotNull('ai_title'); // ne retry que si l'IA a classifié
     }
@@ -139,33 +143,5 @@ class SupportTicket extends Model
                 ? 'failed'
                 : 'pending',
         ]);
-    }
-
-    /**
-     * Estimate average resolution time for a given org + category,
-     * based on past tickets (created_at → glpi_created_at).
-     *
-     * Returns ['hours' => float|null, 'count' => int].
-     * hours is null if fewer than 3 tickets are available.
-     */
-    public static function estimateResolutionHours(int $orgId, string $categorySlug): array
-    {
-        $result = static::where('organization_id', $orgId)
-            ->where('ai_category_slug', $categorySlug)
-            ->where('status', 'created')
-            ->whereNotNull('glpi_created_at')
-            ->selectRaw("COUNT(*) as total, AVG(EXTRACT(EPOCH FROM (glpi_created_at - created_at))) as avg_seconds")
-            ->first();
-
-        $count = (int) ($result?->total ?? 0);
-
-        if ($count < 3) {
-            return ['hours' => null, 'count' => $count];
-        }
-
-        return [
-            'hours' => round((float) $result->avg_seconds / 3600, 1),
-            'count' => $count,
-        ];
     }
 }
