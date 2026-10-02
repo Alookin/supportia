@@ -465,6 +465,40 @@ class GlpiClientService
         }
     }
 
+    // ─── Lecture générique ─────────────────────────────────
+
+    /**
+     * GET générique sur l'API GLPI (session gérée, 1 retry sur 401).
+     * Ne lève pas d'exception sur un code HTTP d'erreur : à l'appelant de vérifier.
+     */
+    public function get(
+        Organization $organization,
+        string $path,
+        array $query = [],
+        ?int $timeout = null,
+    ): \Illuminate\Http\Client\Response {
+        if (! $organization->hasGlpiConfig()) {
+            throw new \RuntimeException("GLPI non configuré pour l'organisation {$organization->slug}");
+        }
+
+        $sessionToken = $this->getSessionToken($organization);
+
+        $response = $this->http($timeout)
+            ->withHeaders($this->headers($organization, $sessionToken))
+            ->get($this->url($organization, $path), $query);
+
+        if ($response->status() === 401) {
+            $this->clearSessionToken($organization);
+            $sessionToken = $this->getSessionToken($organization);
+
+            $response = $this->http($timeout)
+                ->withHeaders($this->headers($organization, $sessionToken))
+                ->get($this->url($organization, $path), $query);
+        }
+
+        return $response;
+    }
+
     // ─── Session management ────────────────────────────────
 
     /**
@@ -557,9 +591,9 @@ class GlpiClientService
     /**
      * Client HTTP préconfiguré (SSL optionnel via env GLPI_VERIFY_SSL=false).
      */
-    private function http(): \Illuminate\Http\Client\PendingRequest
+    private function http(?int $timeout = null): \Illuminate\Http\Client\PendingRequest
     {
-        $client = Http::timeout(config('supportia.ai_timeout', 10));
+        $client = Http::timeout($timeout ?? config('supportia.ai_timeout', 10));
 
         if (! config('supportia.glpi_verify_ssl', true)) {
             $client = $client->withoutVerifying();
@@ -589,6 +623,60 @@ class GlpiClientService
         }
 
         return [];
+    }
+
+    /**
+     * Décode le corps d'une réponse GLPI, y compris quand GLPI concatène un second
+     * bloc JSON après la réponse valide (ex. `[{...}]["ERROR_METHOD_NOT_ALLOWED","..."]`,
+     * constaté sur glpi.web-eci.com pour toutes les listes, même en HTTP 200/206).
+     * Retourne la première valeur JSON (objet ou tableau) équilibrée, ou null.
+     */
+    public function decodeJson(string $body): ?array
+    {
+        $decoded = json_decode($body, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        $len   = strlen($body);
+        $start = strcspn($body, '{[');
+        if ($start >= $len) {
+            return null;
+        }
+
+        $depth    = 0;
+        $inString = false;
+        $escaped  = false;
+
+        for ($i = $start; $i < $len; $i++) {
+            $char = $body[$i];
+
+            if ($inString) {
+                if ($escaped) {
+                    $escaped = false;
+                } elseif ($char === '\\') {
+                    $escaped = true;
+                } elseif ($char === '"') {
+                    $inString = false;
+                }
+                continue;
+            }
+
+            if ($char === '"') {
+                $inString = true;
+            } elseif ($char === '{' || $char === '[') {
+                $depth++;
+            } elseif ($char === '}' || $char === ']') {
+                $depth--;
+                if ($depth === 0) {
+                    $decoded = json_decode(substr($body, $start, $i - $start + 1), true);
+
+                    return is_array($decoded) ? $decoded : null;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function ticketUrl(Organization $organization, int $ticketId): string
