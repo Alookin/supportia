@@ -115,22 +115,6 @@ class SupportDashboardController extends Controller
             ]);
         $maxPriorityCount = $ticketsByPriority->max('count') ?: 1;
 
-        // ─── Temps moyen de résolution par catégorie ─────────────
-        $resolutionTimes = SupportTicket::where('organization_id', $orgId)
-            ->where('status', 'created')
-            ->whereNotNull('glpi_created_at')
-            ->whereNotNull('ai_category_slug')
-            ->selectRaw("ai_category_slug, AVG(EXTRACT(EPOCH FROM (glpi_created_at - created_at))) as avg_seconds")
-            ->groupBy('ai_category_slug')
-            ->orderBy('avg_seconds')
-            ->limit(8)
-            ->get()
-            ->map(fn($row) => [
-                'label'       => $categories->get($row->ai_category_slug, $row->ai_category_slug),
-                'avg_seconds' => (float) $row->avg_seconds,
-                'display'     => $this->formatDuration((float) $row->avg_seconds),
-            ]);
-        $maxResolutionSeconds = $resolutionTimes->max('avg_seconds') ?: 1;
 
         // ─── Last 20 tickets ──────────────────────────────────────
         $tickets = SupportTicket::where('organization_id', $orgId)
@@ -151,8 +135,6 @@ class SupportDashboardController extends Controller
             'maxCategoryDistCount',
             'ticketsByPriority',
             'maxPriorityCount',
-            'resolutionTimes',
-            'maxResolutionSeconds',
             'todayTickets',
             'autoClassified',
             'autoRate',
@@ -168,16 +150,6 @@ class SupportDashboardController extends Controller
         ));
     }
 
-    private function formatDuration(float $seconds): string
-    {
-        if ($seconds < 3600) {
-            return round($seconds / 60) . ' min';
-        }
-        if ($seconds < 86400) {
-            return round($seconds / 3600, 1) . ' h';
-        }
-        return round($seconds / 86400, 1) . ' j';
-    }
 
     public function show(Request $request, int $id): View
     {
@@ -195,9 +167,6 @@ class SupportDashboardController extends Controller
                 ->value('label_simple') ?? $ticket->ai_category_slug ?? '—')
             : ($ticket->ai_category_slug ?? '—');
 
-        $estimate = $orgId && $ticket->ai_category_slug
-            ? SupportTicket::estimateResolutionHours($orgId, $ticket->ai_category_slug)
-            : ['hours' => null, 'count' => 0];
 
         // Données GLPI temps réel (null = indisponible)
         $glpiStatus = null;
@@ -229,7 +198,7 @@ class SupportDashboardController extends Controller
             }
         }
 
-        return view('support.ticket-detail', compact('ticket', 'categoryLabel', 'estimate', 'glpiStatus'));
+        return view('support.ticket-detail', compact('ticket', 'categoryLabel', 'glpiStatus'));
     }
 
     public function addComment(Request $request, int $id): RedirectResponse
