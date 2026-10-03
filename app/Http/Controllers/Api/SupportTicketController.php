@@ -3,9 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Enums\TicketStatus;
 use App\Models\SupportTicket;
 use App\Services\AIClassifierService;
-use App\Services\GlpiClientService;
+use App\Services\GlpiTicketPublisher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +25,7 @@ class SupportTicketController extends Controller
 
     public function __construct(
         private AIClassifierService $classifier,
-        private GlpiClientService $glpiClient,
+        private GlpiTicketPublisher $publisher,
     ) {}
 
     /**
@@ -98,7 +99,10 @@ class SupportTicketController extends Controller
             ? array_filter($request->file('attachments'), fn ($f) => $f && $f->isValid())
             : [];
 
-        $ticket = DB::transaction(function () use ($organization, $user, $validated, $clientIds, $clientName, $classification, $uploadedFiles) {
+        $threshold   = config('supportia.confidence_threshold', 0.7);
+        $autoPublish = $classification['confidence'] >= $threshold;
+
+        $ticket = DB::transaction(function () use ($organization, $user, $validated, $clientIds, $clientName, $classification, $uploadedFiles, $autoPublish) {
             $ticket = SupportTicket::create([
                 'organization_id'  => $organization->id,
                 'user_id'          => $user->id,
@@ -112,7 +116,8 @@ class SupportTicketController extends Controller
                 'ai_priority'      => $classification['priority'],
                 'ai_confidence'    => $classification['confidence'],
                 'ai_provider'      => $classification['provider'],
-                'status'           => 'pending',
+                // Confiance suffisante : envoi immédiat. Sinon : validation obligatoire du commercial.
+                'status'           => ($autoPublish ? TicketStatus::Queued : TicketStatus::NeedsReview)->value,
             ]);
 
             foreach ($uploadedFiles as $file) {
@@ -132,11 +137,11 @@ class SupportTicketController extends Controller
             return $ticket;
         });
 
-        // 5. Si confiance suffisante → création directe dans GLPI
-        $threshold = config('supportia.confidence_threshold', 0.7);
+        $this->classifier->logFor($ticket, $classification);
 
-        if ($classification['confidence'] >= $threshold) {
-            return $this->createInGlpi($organization, $ticket, $classification, $user);
+        // 5. Si confiance suffisante → création directe dans GLPI
+        if ($autoPublish) {
+            return $this->publishToGlpi($ticket);
         }
 
         // 6. Confiance trop basse → retourner la suggestion pour validation
@@ -169,8 +174,8 @@ class SupportTicketController extends Controller
 
         $this->authorize('confirm', $ticket);
 
-        if ($ticket->glpi_ticket_id) {
-            return response()->json(['error' => 'Ce ticket a déjà été créé dans GLPI.'], 409);
+        if ($ticket->glpi_ticket_id || $ticket->status !== TicketStatus::NeedsReview->value) {
+            return response()->json(['error' => 'Ce ticket a déjà été envoyé au support.'], 409);
         }
 
         $validated = $request->validate([
@@ -203,19 +208,12 @@ class SupportTicketController extends Controller
 
         if ($hasChanges) {
             $ticket->was_modified_by_user = true;
-            $ticket->save();
         }
 
-        $classification = [
-            'title'         => $ticket->ai_title,
-            'body'          => $ticket->ai_body,
-            'category_slug' => $ticket->ai_category_slug,
-            'priority'      => $ticket->ai_priority,
-            'confidence'    => $ticket->ai_confidence,
-            'provider'      => $ticket->ai_provider,
-        ];
+        $ticket->status = TicketStatus::Queued->value;
+        $ticket->save();
 
-        return $this->createInGlpi($ticket->organization, $ticket, $classification, $user);
+        return $this->publishToGlpi($ticket);
     }
 
     /**
@@ -249,54 +247,39 @@ class SupportTicketController extends Controller
     // ─── Private ─────────────────────────────────────────
 
     /**
-     * Tente la création dans GLPI et retourne la réponse appropriée.
+     * Tente la création immédiate dans GLPI. En cas d'échec, le ticket part en file
+     * d'attente (job CreateGlpiTicket, nouvelles tentatives automatiques).
      */
-    private function createInGlpi(
-        $organization,
-        SupportTicket $ticket,
-        array $classification,
-        $user,
-    ): JsonResponse {
+    private function publishToGlpi(SupportTicket $ticket): JsonResponse
+    {
+        $estimate = $ticket->resolutionEstimate();
+
+        $summary = [
+            'estimate_hours' => $estimate['hours'] ?? null,
+            'estimate_count' => $estimate['count'] ?? 0,
+            'ticket_id'     => $ticket->id,
+            'title'         => $ticket->ai_title,
+            'category_slug' => $ticket->ai_category_slug,
+            'priority'      => $ticket->ai_priority,
+            'confidence'    => $ticket->ai_confidence,
+        ];
+
         try {
-            $glpiResult = $this->glpiClient->createTicket($organization, [
-                ...$classification,
-                'commercial_name'         => $user->name,
-                'commercial_email'        => $user->email,
-                'commercial_glpi_user_id' => $user->glpi_user_id,
-                'client_name'             => $ticket->client_name,
-                'attachment_count'        => $ticket->attachments()->count(),
-            ]);
+            $result = $this->publisher->publish($ticket);
 
-            $ticket->markAsCreatedInGlpi($glpiResult['id']);
-
-
-            return response()->json([
-                'status'          => 'created',
-                'ticket_id'       => $ticket->id,
-                'glpi_ticket_id'  => $glpiResult['id'],
-                'glpi_url'        => $glpiResult['url'],
-                'title'           => $classification['title'],
-                'category_slug'   => $classification['category_slug'],
-                'priority'        => $classification['priority'],
-                'confidence'      => $classification['confidence'],
+            return response()->json($summary + [
+                'status'         => 'created',
+                'glpi_ticket_id' => $result['id'],
+                'glpi_url'       => $result['url'],
             ]);
         } catch (\Throwable $e) {
-            Log::error('GLPI ticket creation failed', [
-                'ticket_id' => $ticket->id,
-                'error'     => $e->getMessage(),
-            ]);
+            Log::error('GLPI ticket creation failed', ['ticket_id' => $ticket->id, 'error' => $e->getMessage()]);
 
-            $ticket->markAsGlpiFailed($e->getMessage());
+            $this->publisher->queue($ticket, $e);
 
-
-            // Le ticket est sauvé en local, le cron retentera
-            return response()->json([
-                'status'          => 'queued',
-                'ticket_id'       => $ticket->id,
-                'message'         => 'Ticket enregistré. La création GLPI sera retentée automatiquement.',
-                'title'           => $classification['title'],
-                'category_slug'   => $classification['category_slug'],
-                'priority'        => $classification['priority'],
+            return response()->json($summary + [
+                'status'  => 'queued',
+                'message' => 'Ticket enregistré. L\'envoi au support sera relancé automatiquement.',
             ], 202);
         }
     }

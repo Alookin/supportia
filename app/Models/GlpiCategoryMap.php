@@ -21,6 +21,9 @@ class GlpiCategoryMap extends Model
         'glpi_entity_id',
         'is_active',
         'is_visible_to_users',
+        'median_resolution_seconds',
+        'resolution_sample_count',
+        'resolution_stats_at',
     ];
 
     protected $casts = [

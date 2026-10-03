@@ -91,9 +91,10 @@ class AIClassifierService
             $latencyMs = (int) ((microtime(true) - $start) * 1000);
 
             $result['provider'] = 'claude';
+            $result['_meta']    = ['latency_ms' => $latencyMs, 'error' => null] + ($result['_meta'] ?? []);
 
             if ($ticket) {
-                $this->logRequest($ticket, 'claude', $latencyMs, $result);
+                $this->logFor($ticket, $result);
             }
 
             return $result;
@@ -104,9 +105,10 @@ class AIClassifierService
             ]);
 
             $result = $this->fallbackClassify($description, $categories);
+            $result['_meta'] = ['latency_ms' => 0, 'error' => mb_substr($e->getMessage(), 0, 1000)];
 
             if ($ticket) {
-                $this->logRequest($ticket, 'fallback_keywords', 0, $result, $e->getMessage());
+                $this->logFor($ticket, $result);
             }
 
             return $result;
@@ -202,6 +204,10 @@ PROMPT;
         $result = json_decode($matches[0], true, 512, JSON_THROW_ON_ERROR);
 
         return [
+            '_meta'         => [
+                'prompt_tokens'     => $data['usage']['input_tokens'] ?? null,
+                'completion_tokens' => $data['usage']['output_tokens'] ?? null,
+            ],
             'title'         => mb_substr($result['title'] ?? 'Ticket sans titre', 0, 500),
             'body'          => $result['body'] ?? $text,
             'category_slug' => $result['category_slug'] ?? 'autre',
@@ -248,24 +254,27 @@ PROMPT;
         ];
     }
 
-    private function logRequest(
-        SupportTicket $ticket,
-        string $provider,
-        int $latencyMs,
-        array $result,
-        ?string $error = null,
-    ): void {
+    /**
+     * Trace un appel de classification (provider, latence, tokens, erreur éventuelle)
+     * une fois le ticket créé. Ne fait jamais échouer le flux principal.
+     */
+    public function logFor(SupportTicket $ticket, array $classification): void
+    {
+        $meta = $classification['_meta'] ?? [];
+        unset($classification['_meta']);
+
         try {
             AiRequestLog::create([
                 'support_ticket_id' => $ticket->id,
-                'provider'          => $provider,
-                'model'             => config('supportia.claude_model'),
-                'latency_ms'        => $latencyMs,
-                'raw_response'      => $result,
-                'error'             => $error,
+                'provider'          => $classification['provider'] ?? 'unknown',
+                'model'             => ($classification['provider'] ?? null) === 'claude' ? (string) config('supportia.claude_model') : 'keywords',
+                'prompt_tokens'     => $meta['prompt_tokens'] ?? null,
+                'completion_tokens' => $meta['completion_tokens'] ?? null,
+                'latency_ms'        => $meta['latency_ms'] ?? 0,
+                'raw_response'      => $classification,
+                'error'             => $meta['error'] ?? null,
             ]);
         } catch (\Throwable $e) {
-            // Ne jamais planter le flux principal pour un log
             Log::error('Failed to log AI request', ['error' => $e->getMessage()]);
         }
     }

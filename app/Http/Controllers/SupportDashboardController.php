@@ -202,7 +202,7 @@ class SupportDashboardController extends Controller
             }
         }
 
-        return view('support.ticket-detail', compact('ticket', 'categoryLabel', 'glpiStatus'));
+        return view('support.ticket-detail', compact('ticket', 'categoryLabel', 'glpiStatus') + ['estimate' => $ticket->resolutionEstimate()]);
     }
 
     public function addComment(Request $request, int $id): RedirectResponse
@@ -303,7 +303,7 @@ class SupportDashboardController extends Controller
 
         $myTotal    = (clone $base)->count();
         $myThisWeek = (clone $base)->where('created_at', '>=', now()->startOfWeek())->count();
-        $myPending  = (clone $base)->where('status', 'pending')->count();
+        $myPending  = (clone $base)->whereIn('status', ['needs_review', 'queued'])->count();
 
         $tickets = (clone $base)->with('user:id,name')->orderByDesc('created_at')->get();
 

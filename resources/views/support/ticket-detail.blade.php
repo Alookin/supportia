@@ -37,6 +37,7 @@
                             $statusConfig = match($ticket->status) {
                                 'created' => ['label' => 'Créé',       'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
                                 'pending' => ['label' => 'En attente', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
+                                'needs_review' => ['label' => 'À valider', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
                                 'queued'  => ['label' => 'En file',    'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',         'dot' => 'bg-blue-400'],
                                 'failed'  => ['label' => 'Échec',      'class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',            'dot' => 'bg-red-500'],
                                 'resolved'=> ['label' => 'Résolu',     'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
@@ -173,6 +174,20 @@
                 </div>
             @endif
 
+
+            @if($estimate)
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                    <h2 class="text-sm font-semibold text-gray-700 mb-3">Délai de traitement habituel</h2>
+                    @php
+                        $h = $estimate['hours'];
+                        $display = $h < 1 ? "moins d'une heure"
+                            : ($h < 24 ? '~' . round($h) . ' heure' . (round($h) > 1 ? 's' : '')
+                                       : '~' . round($h / 24) . ' jour' . (round($h / 24) > 1 ? 's' : ''));
+                    @endphp
+                    <p class="text-2xl font-bold text-indigo-600">{{ $display }}</p>
+                    <p class="mt-1 text-xs text-gray-400">Médiane des {{ $estimate['count'] }} tickets résolus de cette catégorie (12 derniers mois)</p>
+                </div>
+            @endif
 
             {{-- ── Conversation ────────────────────────────────────── --}}
             @php

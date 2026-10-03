@@ -8,6 +8,12 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Relance des tickets dont l'envoi GLPI a échoué (3 tentatives max par ticket).
-// En production : une entrée cron `* * * * * php artisan schedule:run`.
-Schedule::command('support:retry-glpi')->everyFiveMinutes()->withoutOverlapping();
+// Traitement de la file d'attente (envois GLPI en échec, relancés par le job CreateGlpiTicket).
+// En production, une seule entrée cron suffit : `* * * * * php artisan schedule:run`
+// (pas besoin de superviseur : le worker s'arrête quand la file est vide).
+Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=5')
+    ->everyMinute()
+    ->withoutOverlapping();
+
+// Délai de résolution médian par catégorie (estimation affichée au commercial)
+Schedule::command('glpi:sync-resolution-stats')->dailyAt('03:17')->withoutOverlapping();
