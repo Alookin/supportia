@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class GlpiCategoryMap extends Model
 {
@@ -32,6 +34,27 @@ class GlpiCategoryMap extends Model
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    /** Équipes qui utilisent cette catégorie. Aucune = catégorie commune à toutes les équipes. */
+    public function teams(): BelongsToMany
+    {
+        return $this->belongsToMany(Team::class, 'glpi_category_map_team');
+    }
+
+    /**
+     * Catégories utilisables par une équipe : les catégories communes
+     * + celles rattachées à cette équipe. Sans équipe : catégories communes seulement.
+     */
+    public function scopeForTeam(Builder $query, ?int $teamId): Builder
+    {
+        return $query->where(function (Builder $q) use ($teamId) {
+            $q->whereDoesntHave('teams');
+
+            if ($teamId) {
+                $q->orWhereHas('teams', fn (Builder $t) => $t->whereKey($teamId));
+            }
+        });
     }
 
     /**

@@ -32,7 +32,8 @@ require __DIR__.'/auth.php';
 
 Route::middleware(['auth', 'org.active'])->prefix('support')->group(function () {
     Route::get('/', function () {
-        $categories = auth()->user()->organization?->activeCategories()->get() ?? collect();
+        $user       = auth()->user();
+        $categories = $user->organization?->activeCategories()->forTeam($user->team_id)->get() ?? collect();
         return view('support.create', compact('categories'));
     })->name('support.create');
 

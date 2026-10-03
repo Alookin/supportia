@@ -90,6 +90,7 @@ class SupportTicketController extends Controller
             $organization,
             $validated['description'],
             $clientName,
+            teamId: $user->team_id,
         );
 
         // 4. Créer le ticket et ses pièces jointes en une opération atomique
@@ -150,7 +151,7 @@ class SupportTicketController extends Controller
                 'confidence'    => $classification['confidence'],
                 'provider'      => $classification['provider'],
             ],
-            'categories' => $organization->activeCategories()
+            'categories' => $organization->activeCategories()->forTeam($user->team_id)
                 ->select('slug', 'label', 'label_simple', 'is_visible_to_users')
                 ->get(),
         ]);
@@ -178,7 +179,7 @@ class SupportTicketController extends Controller
             'category_slug' => [
                 'nullable', 'string', 'max:100',
                 \Illuminate\Validation\Rule::in(
-                    $ticket->organization->activeCategories()->pluck('slug')->push('autre')->all()
+                    $ticket->organization->activeCategories()->forTeam($ticket->team_id)->pluck('slug')->push('autre')->all()
                 ),
             ],
             'priority'      => 'nullable|integer|min:1|max:5',
