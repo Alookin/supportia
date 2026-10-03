@@ -38,6 +38,7 @@ Route::middleware(['auth', 'org.active'])->prefix('support')->group(function () 
 
     Route::get('/dashboard', [SupportDashboardController::class, 'index'])->name('support.dashboard');
     Route::get('/mes-tickets', [SupportDashboardController::class, 'myTickets'])->name('support.my-tickets');
+    Route::get('/equipe', [SupportDashboardController::class, 'teamTickets'])->name('support.team-tickets');
     Route::get('/tickets/{id}', [SupportDashboardController::class, 'show'])->name('support.ticket-detail');
     Route::post('/tickets/{id}/comment', [SupportDashboardController::class, 'addComment'])->name('support.ticket-comment');
     Route::get('/tickets/{id}/attachments/{attachmentId}', [SupportDashboardController::class, 'downloadAttachment'])->name('support.ticket-attachment');

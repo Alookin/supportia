@@ -18,12 +18,17 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         {{ __('Dashboard') }}
                     </x-nav-link>
-                    <x-nav-link :href="route('support.dashboard')" :active="request()->routeIs('support.dashboard')">
-                        Suivi
-                    </x-nav-link>
                     <x-nav-link :href="route('support.my-tickets')" :active="request()->routeIs('support.my-tickets')">
                         Mes tickets
                     </x-nav-link>
+                    @if(Auth::user()->canSupervise())
+                        <x-nav-link :href="route('support.team-tickets')" :active="request()->routeIs('support.team-tickets')">
+                            {{ Auth::user()->isAdmin() ? 'Tous les tickets' : 'Mon équipe' }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('support.dashboard')" :active="request()->routeIs('support.dashboard')">
+                            Suivi
+                        </x-nav-link>
+                    @endif
                     <a href="{{ route('support.create') }}"
                        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
@@ -86,12 +91,17 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('support.dashboard')" :active="request()->routeIs('support.dashboard')">
-                Suivi
-            </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('support.my-tickets')" :active="request()->routeIs('support.my-tickets')">
                 Mes tickets
             </x-responsive-nav-link>
+            @if(Auth::user()->canSupervise())
+                <x-responsive-nav-link :href="route('support.team-tickets')" :active="request()->routeIs('support.team-tickets')">
+                    {{ Auth::user()->isAdmin() ? 'Tous les tickets' : 'Mon équipe' }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('support.dashboard')" :active="request()->routeIs('support.dashboard')">
+                    Suivi
+                </x-responsive-nav-link>
+            @endif
             <div class="px-4 py-2">
                 <a href="{{ route('support.create') }}"
                    class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors">

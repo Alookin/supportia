@@ -48,4 +48,43 @@ class CreateUserCommandTest extends TestCase
             'email' => 'jean@example.com', '--name' => 'Jean', '--org' => 'inconnue',
         ])->assertFailed();
     }
+
+    public function test_it_creates_team_and_role(): void
+    {
+        $org = Organization::create(['name' => 'Via-Mobilis', 'slug' => 'via-mobilis', 'is_active' => true]);
+
+        $this->artisan('zeno:user-create', [
+            'email' => 'chef@example.com', '--name' => 'Chef', '--password' => 'motdepasse-solide',
+            '--team' => 'Marketing', '--role' => 'team_admin',
+        ])->assertSuccessful();
+
+        $user = User::where('email', 'chef@example.com')->firstOrFail();
+        $this->assertSame('marketing', $user->team->slug);
+        $this->assertSame($org->id, $user->team->organization_id);
+        $this->assertTrue($user->isTeamAdmin());
+    }
+
+    public function test_team_admin_requires_a_team(): void
+    {
+        Organization::create(['name' => 'Via-Mobilis', 'slug' => 'via-mobilis', 'is_active' => true]);
+
+        $this->artisan('zeno:user-create', [
+            'email' => 'chef@example.com', '--name' => 'Chef', '--password' => 'motdepasse-solide', '--role' => 'team_admin',
+        ])->assertFailed();
+    }
+
+    public function test_update_assigns_team_and_backfills_tickets(): void
+    {
+        $org  = Organization::create(['name' => 'Via-Mobilis', 'slug' => 'via-mobilis', 'is_active' => true]);
+        $user = User::factory()->create(['organization_id' => $org->id, 'email' => 'jean@example.com']);
+        $t    = \App\Models\SupportTicket::create(['organization_id' => $org->id, 'user_id' => $user->id, 'raw_description' => 'x', 'status' => 'created']);
+
+        $this->artisan('zeno:user-update', ['email' => 'jean@example.com', '--team' => 'Commercial', '--role' => 'admin'])
+            ->assertSuccessful();
+
+        $user->refresh();
+        $this->assertTrue($user->isAdmin());
+        $this->assertSame('commercial', $user->team->slug);
+        $this->assertSame($user->team_id, $t->fresh()->team_id);
+    }
 }

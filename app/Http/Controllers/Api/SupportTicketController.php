@@ -101,6 +101,7 @@ class SupportTicketController extends Controller
             $ticket = SupportTicket::create([
                 'organization_id'  => $organization->id,
                 'user_id'          => $user->id,
+                'team_id'          => $user->team_id,
                 'client_ids'       => $clientIds,
                 'client_name'      => $clientName,
                 'raw_description'  => $validated['description'],

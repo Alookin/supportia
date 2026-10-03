@@ -23,19 +23,21 @@ class SupportDashboardController extends Controller
         $org   = $user->organization;
         $orgId = $org?->id;
 
+        abort_unless($user->canSupervise(), 403, 'Dashboard réservé aux administrateurs.');
+
         // ─── Category label map (needed early for chart labels) ───
         $categories = $org
             ? GlpiCategoryMap::where('organization_id', $orgId)->pluck('label_simple', 'slug')
             : collect();
 
         // ─── Stats cards ──────────────────────────────────────────
-        $totalTickets = SupportTicket::where('organization_id', $orgId)->count();
+        $totalTickets = SupportTicket::visibleTo($user)->count();
 
-        $todayTickets = SupportTicket::where('organization_id', $orgId)
+        $todayTickets = SupportTicket::visibleTo($user)
             ->whereDate('created_at', today())
             ->count();
 
-        $autoClassified = SupportTicket::where('organization_id', $orgId)
+        $autoClassified = SupportTicket::visibleTo($user)
             ->where('ai_confidence', '>=', config('supportia.confidence_threshold', 0.7))
             ->count();
 
@@ -44,7 +46,7 @@ class SupportDashboardController extends Controller
             : 0;
 
         // ─── Top 5 categories (horizontal bar chart) ─────────────
-        $topCategories = SupportTicket::where('organization_id', $orgId)
+        $topCategories = SupportTicket::visibleTo($user)
             ->whereNotNull('ai_category_slug')
             ->selectRaw('ai_category_slug, count(*) as total')
             ->groupBy('ai_category_slug')
@@ -62,7 +64,7 @@ class SupportDashboardController extends Controller
         // ─── Tickets par jour — 7 derniers jours (bar chart) ──────
         $sevenDaysAgo = today()->subDays(6)->startOfDay();
 
-        $rawByDay = SupportTicket::where('organization_id', $orgId)
+        $rawByDay = SupportTicket::visibleTo($user)
             ->where('created_at', '>=', $sevenDaysAgo)
             ->selectRaw("DATE(created_at) as day, count(*) as total")
             ->groupBy('day')
@@ -80,7 +82,7 @@ class SupportDashboardController extends Controller
         $maxDayCount = $ticketsByDay->max('count') ?: 1;
 
         // ─── Tickets par catégorie — top 10 ──────────────────────
-        $categoryDistribution = SupportTicket::where('organization_id', $orgId)
+        $categoryDistribution = SupportTicket::visibleTo($user)
             ->whereNotNull('ai_category_slug')
             ->selectRaw('ai_category_slug, count(*) as total')
             ->groupBy('ai_category_slug')
@@ -94,7 +96,7 @@ class SupportDashboardController extends Controller
         $maxCategoryDistCount = $categoryDistribution->max('count') ?: 1;
 
         // ─── Tickets par priorité ────────────────────────────────
-        $ticketsByPriority = SupportTicket::where('organization_id', $orgId)
+        $ticketsByPriority = SupportTicket::visibleTo($user)
             ->whereNotNull('ai_priority')
             ->selectRaw('ai_priority, count(*) as total')
             ->groupBy('ai_priority')
@@ -117,7 +119,7 @@ class SupportDashboardController extends Controller
 
 
         // ─── Last 20 tickets ──────────────────────────────────────
-        $tickets = SupportTicket::where('organization_id', $orgId)
+        $tickets = SupportTicket::visibleTo($user)
             ->with('user:id,name')
             ->orderByDesc('created_at')
             ->limit(20)
@@ -127,7 +129,9 @@ class SupportDashboardController extends Controller
             ? str_replace('/apirest.php', '', rtrim($org->glpi_api_url, '/'))
             : null;
 
-        $orgName = $org?->name ?? 'Via-Mobilis';
+        $orgName = $user->isAdmin()
+            ? ($org?->name ?? 'Via-Mobilis')
+            : ($user->team?->name ?? $org?->name ?? 'Via-Mobilis');
 
         return view('support.dashboard', compact(
             'totalTickets',
@@ -274,41 +278,41 @@ class SupportDashboardController extends Controller
 
     public function myTickets(Request $request): View
     {
-        $user  = $request->user();
-        $org   = $user->organization;
-        $orgId = $org?->id;
-        $userId = $user->id;
+        $user = $request->user();
 
-        abort_if(! $orgId, 403, 'Aucune organisation active associée à votre compte.');
+        abort_if(! $user->organization_id, 403, 'Aucune organisation active associée à votre compte.');
 
-        // ─── Stats ────────────────────────────────────────────────
-        $myTotal = SupportTicket::where('user_id', $userId)
-            ->where('organization_id', $orgId)
-            ->count();
+        return $this->ticketList(SupportTicket::where('organization_id', $user->organization_id)->where('user_id', $user->id), false);
+    }
 
-        $myThisWeek = SupportTicket::where('user_id', $userId)
-            ->where('organization_id', $orgId)
-            ->where('created_at', '>=', now()->startOfWeek())
-            ->count();
+    /**
+     * Tickets de toute l'équipe (admin d'équipe) ou de toute l'organisation (admin).
+     */
+    public function teamTickets(Request $request): View
+    {
+        $user = $request->user();
 
-        $myPending = SupportTicket::where('user_id', $userId)
-            ->where('organization_id', $orgId)
-            ->where('status', 'pending')
-            ->count();
+        abort_unless($user->canSupervise(), 403, 'Réservé aux administrateurs.');
 
-        // ─── Tickets list ─────────────────────────────────────────
-        $tickets = SupportTicket::where('user_id', $userId)
-            ->where('organization_id', $orgId)
-            ->orderByDesc('created_at')
-            ->get();
+        return $this->ticketList(SupportTicket::visibleTo($user), true, $user->isAdmin() ? 'Tous les tickets' : 'Tickets de l\'équipe '.$user->team?->name);
+    }
 
-        // ─── Category labels ──────────────────────────────────────
+    private function ticketList($base, bool $teamView, ?string $title = null): View
+    {
+        $org = request()->user()->organization;
+
+        $myTotal    = (clone $base)->count();
+        $myThisWeek = (clone $base)->where('created_at', '>=', now()->startOfWeek())->count();
+        $myPending  = (clone $base)->where('status', 'pending')->count();
+
+        $tickets = (clone $base)->with('user:id,name')->orderByDesc('created_at')->get();
+
         $categories = $org
-            ? GlpiCategoryMap::where('organization_id', $orgId)->pluck('label_simple', 'slug')
+            ? GlpiCategoryMap::where('organization_id', $org->id)->pluck('label_simple', 'slug')
             : collect();
 
         $glpiBaseUrl = $org
-            ? str_replace('/apirest.php', '', rtrim($org->glpi_api_url, '/'))
+            ? str_replace('/apirest.php', '', rtrim((string) $org->glpi_api_url, '/'))
             : null;
 
         return view('support.my-tickets', compact(
@@ -318,6 +322,8 @@ class SupportDashboardController extends Controller
             'tickets',
             'categories',
             'glpiBaseUrl',
+            'teamView',
+            'title',
         ));
     }
 
@@ -337,8 +343,8 @@ class SupportDashboardController extends Controller
 
         abort_if(! $orgId, 403);
 
-        $ticket = SupportTicket::where('id', $id)
-            ->where('organization_id', $orgId)
+        $ticket = SupportTicket::visibleTo($user)
+            ->where('id', $id)
             ->firstOrFail();
 
         $attachment = TicketAttachment::where('id', $attachmentId)
