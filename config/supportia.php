@@ -31,6 +31,11 @@ return [
     'glpi_retry_delay' => 300, // secondes entre chaque retry
     'glpi_verify_ssl' => env('GLPI_VERIFY_SSL', true),
 
+    // Mode simulation (tests en local) : aucune écriture dans GLPI. Les créations de tickets,
+    // pièces jointes et commentaires sont journalisées et reçoivent un faux numéro.
+    // Les lectures (statistiques, export) restent réelles. Ignoré en production.
+    'glpi_dry_run' => (bool) env('GLPI_DRY_RUN', false),
+
     /*
     |--------------------------------------------------------------------------
     | Pièces jointes

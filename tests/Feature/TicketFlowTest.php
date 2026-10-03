@@ -214,4 +214,18 @@ class TicketFlowTest extends TestCase
         $this->assertSame(5, SyncResolutionStatsCommand::median([1, 5, 9]));
         $this->assertSame(4, SyncResolutionStatsCommand::median([1, 3, 5, 9]));
     }
+
+    public function test_dry_run_never_writes_to_glpi(): void
+    {
+        config(['supportia.glpi_dry_run' => true]);
+        Http::fake(['api.anthropic.com/*' => Http::response($this->claude(0.92)), '*' => Http::response([], 500)]);
+
+        $this->submit(['attachments' => [UploadedFile::fake()->createWithContent('erreur.log', 'x')]])
+            ->assertOk()->assertJsonPath('status', 'created');
+
+        $this->assertGreaterThanOrEqual(900000, (int) SupportTicket::firstOrFail()->glpi_ticket_id);
+        Http::assertNotSent(fn (HttpRequest $r) => str_contains($r->url(), 'glpi.test'));
+
+        $this->actingAs($this->user)->get('/support')->assertSee('Mode test');
+    }
 }

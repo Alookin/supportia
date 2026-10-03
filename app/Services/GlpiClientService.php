@@ -19,6 +19,13 @@ class GlpiClientService
      */
     public function createTicket(Organization $organization, array $ticketData): array
     {
+        if (self::dryRun()) {
+            $id = 900000 + (int) Cache::increment('glpi_dry_run_ticket_seq');
+            Log::info('[GLPI simulation] Ticket non envoyé', ['fake_id' => $id, 'content' => $this->formatContent($ticketData)] + $ticketData);
+
+            return ['id' => $id, 'url' => $this->ticketUrl($organization, $id)];
+        }
+
         if (! $organization->hasGlpiConfig()) {
             throw new \RuntimeException(
                 "GLPI non configuré pour l'organisation {$organization->slug}"
@@ -126,6 +133,16 @@ class GlpiClientService
      */
     public function getTicketStatus(Organization $organization, int $glpiTicketId): ?array
     {
+        if (self::dryRun() && $glpiTicketId >= 900000) {
+            return [
+                'status'          => 2,
+                'status_label'    => 'En cours (assigné) — simulation',
+                'assigned_to'     => 'Technicien (simulation)',
+                'resolution_date' => null,
+                'followups'       => [],
+            ];
+        }
+
         if (! $organization->hasGlpiConfig()) {
             return null;
         }
@@ -304,6 +321,12 @@ class GlpiClientService
      */
     public function addFollowup(Organization $organization, int $glpiTicketId, string $content): bool
     {
+        if (self::dryRun()) {
+            Log::info('[GLPI simulation] Suivi non envoyé', ['glpi_ticket_id' => $glpiTicketId, 'content' => $content]);
+
+            return true;
+        }
+
         if (! $organization->hasGlpiConfig()) {
             return false;
         }
@@ -550,6 +573,12 @@ class GlpiClientService
         throw new \RuntimeException("{$itemtype} offset {$offset} illisible : {$error}");
     }
 
+    /** Mode simulation actif (jamais en production). */
+    public static function dryRun(): bool
+    {
+        return (bool) config('supportia.glpi_dry_run') && ! app()->environment('production');
+    }
+
     public function ticketUrlFor(Organization $organization, int $ticketId): string
     {
         return $this->ticketUrl($organization, $ticketId);
@@ -564,6 +593,12 @@ class GlpiClientService
      */
     public function uploadDocument(Organization $organization, int $glpiTicketId, string $path, string $originalName): int
     {
+        if (self::dryRun()) {
+            Log::info('[GLPI simulation] Pièce jointe non envoyée', ['glpi_ticket_id' => $glpiTicketId, 'file' => $originalName]);
+
+            return 0;
+        }
+
         if (! is_file($path)) {
             throw new \RuntimeException("Fichier introuvable : {$originalName}");
         }

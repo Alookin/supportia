@@ -19,6 +19,12 @@
         <div class="min-h-screen bg-gray-100">
             @include('layouts.navigation')
 
+            @if(\App\Services\GlpiClientService::dryRun())
+                <div class="bg-amber-100 border-b border-amber-300 text-amber-900 text-sm text-center py-2 px-4">
+                    <strong>Mode test</strong> : aucun ticket n'est envoyé à GLPI (numéros fictifs à partir de 900000).
+                </div>
+            @endif
+
             <!-- Page Heading -->
             @isset($header)
                 <header class="bg-white shadow">
