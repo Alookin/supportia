@@ -354,6 +354,15 @@
                 </div>
 
 
+                <template x-if="createdData.estimate_hours">
+                    <div class="mb-5 rounded-lg p-4 text-sm bg-indigo-50 text-left">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-indigo-400 mb-1">Délai de traitement habituel</p>
+                        <p class="text-lg font-bold text-indigo-700" x-text="estimateDisplay(createdData.estimate_hours)"></p>
+                        <p class="text-xs text-indigo-400 mt-0.5"
+                           x-text="'Médiane des ' + createdData.estimate_count + ' derniers tickets résolus de cette catégorie'"></p>
+                    </div>
+                </template>
+
                 <template x-if="createdData.ticket_id">
                     <a :href="`/support/tickets/${createdData.ticket_id}`"
                        class="block w-full py-3 rounded-lg font-bold text-indigo-600
@@ -595,6 +604,8 @@ function supportForm() {
 
                 this.createdData = {
                     ...this.editResult,
+                    estimate_hours: data.estimate_hours ?? null,
+                    estimate_count: data.estimate_count ?? 0,
                     ticket_id:      data.ticket_id || ticketId,
                 };
                 this.glpiTicketId = data.glpi_ticket_id || null;
@@ -624,6 +635,14 @@ function supportForm() {
 
         // ─── Helpers ────────────────────────
 
+
+        estimateDisplay(hours) {
+            if (!hours) return '';
+            if (hours < 1) return 'moins d\'une heure';
+            if (hours < 24) { const h = Math.round(hours); return '~' + h + ' heure' + (h > 1 ? 's' : ''); }
+            const d = Math.round(hours / 24);
+            return '~' + d + ' jour' + (d > 1 ? 's' : '');
+        },
 
         getCategoryLabel(slug) {
             const cat = this.categories.find(c => c.slug === slug);

@@ -15,6 +15,7 @@ class TicketAttachment extends Model
         'mime_type',
         'size',
         'path',
+        'glpi_document_id',
     ];
 
     protected $casts = [

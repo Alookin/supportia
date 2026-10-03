@@ -89,6 +89,13 @@ class GlpiClientService
                 ->post($this->url($organization, '/Ticket'), $payload);
         }
 
+        // Un code d'erreur HTTP n'est jamais un succès, même si le corps contient un « id »
+        if (! $response->successful()) {
+            throw new \RuntimeException(
+                'GLPI a refusé la création (HTTP ' . $response->status() . ') : ' . mb_substr($response->body(), 0, 200)
+            );
+        }
+
         $data = $this->parseFirstJson($response->body());
 
         if (empty($data)) {
@@ -225,85 +232,42 @@ class GlpiClientService
                 }
             }
 
-            // Followups via searchText (criteria ne filtre pas fiablement dans GLPI 10)
-            // Champs forcedisplay : 1=id, 2=date, 4=content, 5=users_id
-            Log::debug('[GLPI Followups] Request', ['glpi_ticket_id' => $glpiTicketId]);
+            // Suivis : sous-ressource du ticket (fiable sur GLPI 10, cf. glpi:probe du 02/10/2026).
+            // expand_dropdowns → users_id contient directement le nom de l'auteur.
+            // Les suivis privés (notes internes des techniciens) ne sont jamais renvoyés.
             $fuResp = $this->http()
                 ->withHeaders($this->headers($organization, $sessionToken))
-                ->get($this->url($organization, '/ITILFollowup'), [
-                    'searchText[items_id]' => $glpiTicketId,
-                    'searchText[itemtype]' => 'Ticket',
-                    'forcedisplay[0]'      => 2,   // date
-                    'forcedisplay[1]'      => 4,   // content
-                    'forcedisplay[2]'      => 5,   // users_id
-                    'forcedisplay[3]'      => 1,   // id
-                    'range'               => '0-19',
+                ->get($this->url($organization, "/Ticket/{$glpiTicketId}/ITILFollowup"), [
+                    'expand_dropdowns' => 'true',
+                    'range'            => '0-99',
                 ]);
 
-            Log::debug('[GLPI Followups] Response', [
-                'status'       => $fuResp->status(),
-                'body_preview' => substr($fuResp->body(), 0, 300),
-            ]);
-
             $followups = [];
-            $fuBody = $fuResp->body();
-            $followupsData = null;
-            // Extraire le tableau JSON depuis le début du body (même si GLPI retourne 405)
-            $firstBracket = strpos($fuBody, '[');
-            if ($firstBracket !== false) {
-                $depth = 0;
-                $end = $firstBracket;
-                for ($i = $firstBracket; $i < strlen($fuBody); $i++) {
-                    if ($fuBody[$i] === '[' || $fuBody[$i] === '{') $depth++;
-                    if ($fuBody[$i] === ']' || $fuBody[$i] === '}') $depth--;
-                    if ($depth === 0) { $end = $i; break; }
+            foreach ($this->decodeJson($fuResp->body()) ?? [] as $fu) {
+                if (! is_array($fu) || ! empty($fu['is_private'])) {
+                    continue;
                 }
-                $followupsData = json_decode(substr($fuBody, $firstBracket, $end - $firstBracket + 1), true);
+
+                // GLPI encode parfois les balises en entités HTML (&#60;p&#62;…)
+                // Ordre obligatoire : 1) décoder les entités, 2) blocs → \n, 3) strip_tags
+                $decoded = html_entity_decode((string) ($fu['content'] ?? ''), ENT_QUOTES, 'UTF-8');
+                $decoded = preg_replace('/<\s*(br|p|div|li)[^>]*>/i', "\n", $decoded);
+                $content = trim(preg_replace('/\n{3,}/', "\n\n", strip_tags($decoded)));
+
+                if ($content === '') {
+                    continue;
+                }
+
+                $author = $fu['users_id'] ?? null;
+
+                $followups[] = [
+                    'date'    => $fu['date'] ?? $fu['date_creation'] ?? null,
+                    'author'  => is_string($author) && ! is_numeric($author) ? $author : null,
+                    'content' => $content,
+                ];
             }
 
-            if (is_array($followupsData)) {
-                $rows   = $followupsData['data'] ?? (is_array($followupsData) ? $followupsData : []);
-
-                // Cache local des noms d'auteurs pour éviter les requêtes redondantes
-                $userNameCache = [];
-
-                foreach ($rows as $fu) {
-                    if (! is_array($fu)) {
-                        continue;
-                    }
-
-                    // Champ 4 = content
-                    // GLPI encode parfois les tags en entités HTML (&#60;p&#62; etc.)
-                    // Ordre obligatoire : 1) décoder les entités, 2) convertir blocs en \n, 3) strip_tags
-                    $raw     = $fu['4'] ?? $fu['content'] ?? '';
-                    $decoded = html_entity_decode($raw, ENT_QUOTES, 'UTF-8');
-                    $decoded = preg_replace('/<\s*(br|p|div|li)[^>]*>/i', "\n", $decoded);
-                    $content = trim(preg_replace('/\n{3,}/', "\n\n", strip_tags($decoded)));
-
-                    if (empty($content)) {
-                        continue;
-                    }
-
-                    // Champ 5 = users_id → lookup du nom complet
-                    $usersId    = (int) ($fu['5'] ?? 0);
-                    $authorName = null;
-
-                    if ($usersId > 0) {
-                        if (array_key_exists($usersId, $userNameCache)) {
-                            $authorName = $userNameCache[$usersId];
-                        } else {
-                            $authorName             = $this->fetchGlpiUserName($organization, $sessionToken, $usersId);
-                            $userNameCache[$usersId] = $authorName;
-                        }
-                    }
-
-                    $followups[] = [
-                        'date'    => $fu['2'] ?? $fu['date'] ?? null,  // champ 2 = date
-                        'author'  => $authorName,
-                        'content' => $content,
-                    ];
-                }
-            }
+            usort($followups, fn ($a, $b) => strcmp((string) $a['date'], (string) $b['date']));
 
             $result = [
                 'status'          => $statusInt,
@@ -326,54 +290,6 @@ class GlpiClientService
         }
     }
 
-    /**
-     * Recherche des tickets ouverts similaires dans GLPI.
-     * Utilisé pour le dédoublonnage (phase 2+).
-     */
-    public function searchSimilarTickets(Organization $organization, string $title): array
-    {
-        if (! $organization->hasGlpiConfig()) {
-            return [];
-        }
-
-        try {
-            $sessionToken = $this->getSessionToken($organization);
-        } catch (\Throwable) {
-            return [];
-        }
-
-        // Extraire les 3 mots les plus significatifs (> 3 caractères)
-        $words = array_filter(
-            explode(' ', $title),
-            fn($w) => mb_strlen($w) > 3
-        );
-        $searchTerm = implode(' ', array_slice($words, 0, 3));
-
-        if (empty($searchTerm)) {
-            return [];
-        }
-
-        $response = $this->http()->withHeaders($this->headers($organization, $sessionToken))
-            ->get($this->url($organization, '/search/Ticket'), [
-                'criteria[0][field]'      => 1,   // Titre
-                'criteria[0][searchtype]' => 'contains',
-                'criteria[0][value]'      => $searchTerm,
-                'criteria[1][link]'       => 'AND',
-                'criteria[1][field]'      => 12,  // Statut
-                'criteria[1][searchtype]' => 'notequals',
-                'criteria[1][value]'      => 6,   // Pas "Clos"
-                'range'                   => '0-4',
-                'forcedisplay[0]'         => 1,   // Titre
-                'forcedisplay[1]'         => 12,  // Statut
-                'forcedisplay[2]'         => 15,  // Date ouverture
-            ]);
-
-        if ($response->failed()) {
-            return [];
-        }
-
-        return $response->json('data') ?? [];
-    }
 
     // ─── Followup ──────────────────────────────────────────
 
@@ -431,39 +347,6 @@ class GlpiClientService
         }
     }
 
-    // ─── Requester assignment ──────────────────────────────
-
-    /**
-     * Corrige le demandeur d'un ticket GLPI existant via PUT /Ticket/{id}.
-     * Échec silencieux : le ticket est déjà créé, ne pas le faire échouer pour ça.
-     */
-    private function assignTicketRequester(
-        Organization $organization,
-        string $sessionToken,
-        int $ticketId,
-        int $glpiUserId,
-    ): void {
-        try {
-            $response = $this->http()
-                ->withHeaders($this->headers($organization, $sessionToken))
-                ->put($this->url($organization, "/Ticket/{$ticketId}"), [
-                    'input' => [
-                        '_users_id_requester' => $glpiUserId,
-                    ],
-                ]);
-
-            Log::debug('[GLPI] Assignation demandeur', [
-                'ticket_id'    => $ticketId,
-                'glpi_user_id' => $glpiUserId,
-                'status'       => $response->status(),
-            ]);
-        } catch (\Throwable $e) {
-            Log::warning('[GLPI] assignTicketRequester failed', [
-                'ticket_id' => $ticketId,
-                'error'     => $e->getMessage(),
-            ]);
-        }
-    }
 
     // ─── Lecture générique ─────────────────────────────────
 
@@ -531,48 +414,6 @@ class GlpiClientService
 
     // ─── Helpers ────────────────────────────────────────────
 
-    /**
-     * Récupère le nom complet d'un utilisateur GLPI par son ID.
-     * Retourne null silencieusement en cas d'échec (ne doit pas bloquer l'affichage).
-     * Champ 34 = realname, champ 9 = firstname, champ 1 = login (fallback).
-     */
-    private function fetchGlpiUserName(Organization $organization, string $sessionToken, int $userId): ?string
-    {
-        try {
-            $resp = $this->http()
-                ->withHeaders($this->headers($organization, $sessionToken))
-                ->get($this->url($organization, "/User/{$userId}"), [
-                    'forcedisplay[0]' => 1,   // login
-                    'forcedisplay[1]' => 34,  // realname (nom)
-                    'forcedisplay[2]' => 9,   // firstname (prénom)
-                ]);
-
-            if (! $resp->ok()) {
-                return null;
-            }
-
-            $data = $this->parseFirstJson($resp->body());
-
-            // Essayer prénom + nom, puis nom seul, puis login
-            $realname  = trim($data['34'] ?? $data['realname']  ?? '');
-            $firstname = trim($data['9']  ?? $data['firstname'] ?? '');
-            $login     = trim($data['1']  ?? $data['name']      ?? '');
-
-            if ($firstname && $realname) {
-                return $firstname . ' ' . $realname;
-            }
-            if ($realname) {
-                return $realname;
-            }
-            if ($login) {
-                return $login;
-            }
-
-            return null;
-        } catch (\Throwable) {
-            return null;
-        }
-    }
 
     private function headers(Organization $organization, string $sessionToken): array
     {
@@ -593,7 +434,7 @@ class GlpiClientService
      */
     private function http(?int $timeout = null): \Illuminate\Http\Client\PendingRequest
     {
-        $client = Http::timeout($timeout ?? config('supportia.ai_timeout', 10));
+        $client = Http::timeout($timeout ?? config('supportia.glpi_timeout', 15));
 
         if (! config('supportia.glpi_verify_ssl', true)) {
             $client = $client->withoutVerifying();
@@ -603,26 +444,11 @@ class GlpiClientService
     }
 
     /**
-     * Extrait le premier objet JSON d'une réponse GLPI potentiellement malformée.
-     * Certaines instances GLPI concatènent plusieurs payloads JSON dans la même réponse.
+     * Premier objet/tableau JSON d'une réponse GLPI (voir decodeJson), ou [] si illisible.
      */
     private function parseFirstJson(string $body): array
     {
-        // Tente un décodage direct d'abord
-        $decoded = json_decode($body, true);
-        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-            return $decoded;
-        }
-
-        // Extraire le premier objet { ... } valide
-        if (preg_match('/(\{[^}]+\})/', $body, $m)) {
-            $decoded = json_decode($m[1], true);
-            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                return $decoded;
-            }
-        }
-
-        return [];
+        return $this->decodeJson($body) ?? [];
     }
 
     /**
@@ -679,6 +505,96 @@ class GlpiClientService
         return null;
     }
 
+    /**
+     * Lot d'éléments d'une liste GLPI (/Ticket, /ITILFollowup…), 3 tentatives, puis
+     * scission de la plage en deux (GLPI renvoie des 500 intermittents sur les gros lots).
+     *
+     * @return array{0: list<array>, 1: int} [éléments, total annoncé par Content-Range]
+     */
+    public function listRange(Organization $organization, string $itemtype, int $offset, int $size, ?int $total = null): array
+    {
+        $end = $total !== null ? min($offset + $size - 1, $total - 1) : $offset + $size - 1;
+        if ($end < $offset) {
+            return [[], $total ?? 0];
+        }
+
+        $error = null;
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            try {
+                $response = $this->get($organization, "/{$itemtype}", ['range' => "{$offset}-{$end}"], 120);
+                $data     = $this->decodeJson($response->body());
+
+                if (is_array($data) && array_is_list($data) && ($data === [] || is_array($data[0])) && $response->status() < 500) {
+                    preg_match('#/(\d+)$#', (string) $response->header('Content-Range'), $m);
+
+                    return [$data, isset($m[1]) ? (int) $m[1] : ($total ?? count($data))];
+                }
+                if (is_array($data) && ($data[0] ?? null) === 'ERROR_RANGE_EXCEED_TOTAL') {
+                    return [[], $total ?? 0];
+                }
+                $error = 'HTTP ' . $response->status();
+            } catch (\Throwable $e) {
+                $error = $e->getMessage();
+            }
+            usleep(500000 * $attempt);
+        }
+
+        if ($end > $offset) {
+            $half = intdiv($end - $offset + 1, 2);
+            [$left, $total]  = $this->listRange($organization, $itemtype, $offset, $half, $total);
+            [$right, $total] = $this->listRange($organization, $itemtype, $offset + $half, $end - $offset + 1 - $half, $total);
+
+            return [array_merge($left, $right), $total];
+        }
+
+        throw new \RuntimeException("{$itemtype} offset {$offset} illisible : {$error}");
+    }
+
+    public function ticketUrlFor(Organization $organization, int $ticketId): string
+    {
+        return $this->ticketUrl($organization, $ticketId);
+    }
+
+    /**
+     * Envoie un fichier dans GLPI et le rattache au ticket (POST /Document, multipart).
+     * Format « uploadManifest » de l'API REST GLPI ; le rattachement via itemtype/items_id
+     * crée le Document_Item. À valider sur l'instance réelle (première PJ envoyée).
+     *
+     * @return int ID du document GLPI
+     */
+    public function uploadDocument(Organization $organization, int $glpiTicketId, string $path, string $originalName): int
+    {
+        if (! is_file($path)) {
+            throw new \RuntimeException("Fichier introuvable : {$originalName}");
+        }
+
+        $sessionToken = $this->getSessionToken($organization);
+
+        $manifest = json_encode(['input' => [
+            'name'      => $originalName,
+            '_filename' => [$originalName],
+            'itemtype'  => 'Ticket',
+            'items_id'  => $glpiTicketId,
+        ]], JSON_UNESCAPED_UNICODE);
+
+        $response = $this->http(60)
+            ->withHeaders([
+                'App-Token'     => $organization->glpi_app_token,
+                'Session-Token' => $sessionToken,
+            ])
+            ->attach('uploadManifest', $manifest)
+            ->attach('filename[0]', file_get_contents($path), $originalName)
+            ->post($this->url($organization, '/Document'));
+
+        $data = $this->decodeJson($response->body()) ?? [];
+
+        if (! $response->successful() || empty($data['id'])) {
+            throw new \RuntimeException('Envoi du document refusé par GLPI (HTTP ' . $response->status() . ') : ' . mb_substr($response->body(), 0, 200));
+        }
+
+        return (int) $data['id'];
+    }
+
     private function ticketUrl(Organization $organization, int $ticketId): string
     {
         // Déduire l'URL front de GLPI depuis l'URL API
@@ -702,6 +618,9 @@ class GlpiClientService
                 $html[] = '<br><b>' . e($m[1]) . '</b><br>';
                 continue;
             }
+
+            // Échappement AVANT la mise en forme : aucun HTML saisi ne passe tel quel dans GLPI
+            $line = e($line);
 
             // - item  →  • item
             if (preg_match('/^- (.+)$/', $line, $m)) {

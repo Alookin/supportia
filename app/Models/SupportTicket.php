@@ -141,27 +141,34 @@ class SupportTicket extends Model
             || ($user->isTeamAdmin() && $this->team_id !== null && (int) $this->team_id === (int) $user->team_id);
     }
 
-    /**
-     * Tickets en attente de création GLPI (pour le job de retry).
-     */
-    public function scopePendingGlpi(Builder $query): Builder
-    {
-        return $query->whereNull('glpi_ticket_id')
-                     ->where('status', 'pending')
-                     // Seuls les tickets dont l'envoi GLPI a déjà été tenté puis a échoué.
-                     // Exclut les tickets en attente de validation (needs_review, jamais
-                     // envoyés) : un retry les pousserait dans GLPI sans validation.
-                     ->where('glpi_retry_count', '>', 0)
-                     ->where('glpi_retry_count', '<', config('supportia.glpi_retry_attempts', 3))
-                     ->whereNotNull('ai_title'); // ne retry que si l'IA a classifié
-    }
 
     // ─── Actions ────────────────────────────────────────
 
-    public function canRetry(): bool
+
+    /**
+     * Délai habituel de traitement de la catégorie du ticket (médiane GLPI sur 12 mois),
+     * ou null si moins de 5 tickets de référence.
+     *
+     * @return array{hours: float, count: int}|null
+     */
+    public function resolutionEstimate(): ?array
     {
-        return is_null($this->glpi_ticket_id)
-            && $this->glpi_retry_count < config('supportia.glpi_retry_attempts', 3);
+        if (! $this->ai_category_slug) {
+            return null;
+        }
+
+        $category = GlpiCategoryMap::where('organization_id', $this->organization_id)
+            ->where('slug', $this->ai_category_slug)
+            ->first();
+
+        if (! $category?->median_resolution_seconds || $category->resolution_sample_count < 5) {
+            return null;
+        }
+
+        return [
+            'hours' => round($category->median_resolution_seconds / 3600, 1),
+            'count' => (int) $category->resolution_sample_count,
+        ];
     }
 
     public function markAsCreatedInGlpi(int $glpiTicketId): void
@@ -174,14 +181,4 @@ class SupportTicket extends Model
         ]);
     }
 
-    public function markAsGlpiFailed(string $error): void
-    {
-        $this->increment('glpi_retry_count');
-        $this->update([
-            'glpi_last_error' => $error,
-            'status' => $this->glpi_retry_count >= config('supportia.glpi_retry_attempts', 3)
-                ? 'failed'
-                : 'pending',
-        ]);
-    }
 }

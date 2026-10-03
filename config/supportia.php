@@ -9,7 +9,9 @@ return [
     */
     'claude_api_key' => env('CLAUDE_API_KEY'),
     'claude_model' => env('CLAUDE_MODEL', 'claude-sonnet-4-20250514'),
-    'ai_timeout' => (int) env('SUPPORTIA_AI_TIMEOUT', 5),
+    // Sonnet met souvent plus de 5 s à répondre : un timeout trop court déclenche le fallback mots-clés
+    'ai_timeout' => (int) env('SUPPORTIA_AI_TIMEOUT', 25),
+    'glpi_timeout' => (int) env('SUPPORTIA_GLPI_TIMEOUT', 15),
     'claude_verify_ssl' => env('CLAUDE_VERIFY_SSL', true),
 
     /*

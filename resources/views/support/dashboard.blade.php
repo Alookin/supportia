@@ -255,6 +255,11 @@
                                                 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',
                                                 'dot'   => 'bg-yellow-400',
                                             ],
+                                            'needs_review' => [
+                                                'label' => 'À valider',
+                                                'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',
+                                                'dot'   => 'bg-yellow-400',
+                                            ],
                                             'queued'  => [
                                                 'label' => 'En file',
                                                 'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',
