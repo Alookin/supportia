@@ -79,8 +79,10 @@ class AIClassifierService
         string $description,
         ?string $clientName = null,
         ?SupportTicket $ticket = null,
+        ?int $teamId = null,
     ): array {
-        $categories = $organization->activeCategories()->get();
+        // Seules les catégories de l'équipe du demandeur (+ communes) sont proposées à l'IA
+        $categories = $organization->activeCategories()->forTeam($teamId)->get();
         $prompt = $this->buildPrompt($description, $clientName, $categories);
 
         try {

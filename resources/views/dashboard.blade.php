@@ -62,6 +62,7 @@
                     </div>
                 </a>
 
+                @if(Auth::user()->canSupervise())
                 {{-- Suivi global --}}
                 <a href="{{ route('support.dashboard') }}"
                    class="group bg-white hover:bg-gray-50 rounded-2xl shadow-sm border border-gray-100 p-7 flex flex-col gap-4 transition-colors">
@@ -81,6 +82,7 @@
                         </svg>
                     </div>
                 </a>
+                @endif
 
             </div>
 

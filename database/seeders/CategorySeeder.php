@@ -47,9 +47,9 @@ class CategorySeeder extends Seeder
                 'is_visible_to_users' => true,
             ],
             [
-                'glpi_category_id'    => 18,
+                'glpi_category_id'    => 34, // corrigé le 03/10/2026 (était 18 = Bug import)
                 'slug'                => 'tech_photos_medias',
-                'label'               => '[TECHNIQUE] Photos / Médias',
+                'label'               => '[TECHNIQUE] Photos & Médias',
                 'label_simple'        => 'Photos manquantes ou cassées',
                 'description'         => "Problème lié aux photos des annonces. Photos qui ne s'importent pas, photos floues, mauvais ordre, photos manquantes après import, problème d'upload manuel.",
                 'keywords'            => ['photo', 'photos', 'image', 'média', 'upload', 'floutée', 'manquante', 'sans photo', 'foto', 'sans photos'],
@@ -77,9 +77,9 @@ class CategorySeeder extends Seeder
                 'is_visible_to_users' => true,
             ],
             [
-                'glpi_category_id'    => 9,
+                'glpi_category_id'    => 35, // corrigé le 03/10/2026 (était 9 = Flux & Imports)
                 'slug'                => 'tech_diffusion',
-                'label'               => '[TECHNIQUE] Diffusion portails',
+                'label'               => '[TECHNIQUE] Diffusion & Annonces',
                 'label_simple'        => 'Annonces pas diffusées',
                 'description'         => "Problème de diffusion des annonces vers les portails externes. Annonces non publiées sur Leboncoin, La Centrale, Autoscout24, Truck1, Mascus, TruckScout24, Europe-Camions.",
                 'keywords'            => ['diffusion', 'portail', 'leboncoin', 'lbc', 'la centrale', 'autoscout', 'truck1', 'mascus', 'europe-camions', 'truckscout', 'publication', 'publier'],
@@ -200,6 +200,8 @@ class CategorySeeder extends Seeder
                 'keywords'            => ['bug back', 'backend', 'serveur', 'cron', 'erreur serveur', 'traitement', '500', 'erreur interne'],
                 'parent_slug'         => null,
                 'is_visible_to_users' => false,
+                // L'ID GLPI 10 n'existe plus (absent de l'export du 02/10/2026) → désactivée
+                'is_active'           => false,
             ],
             [
                 'glpi_category_id'    => 8,
@@ -311,6 +313,61 @@ class CategorySeeder extends Seeder
                 'parent_slug'         => null,
                 'is_visible_to_users' => false,
             ],
+            // ═══════════════════════════════════════════════════════════════
+            // AJOUTÉES LE 03/10/2026 — catégories GLPI non mappées jusque-là
+            // (descriptions et mots-clés déduits du nom : à affiner)
+            // ═══════════════════════════════════════════════════════════════
+
+            [
+                'glpi_category_id'    => 31,
+                'slug'                => 'tech_traductions',
+                'label'               => '[TECHNIQUE] Traductions',
+                'label_simple'        => 'Traduction',
+                'description'         => "Texte non traduit, traduction erronée ou manquante sur les sites ou les annonces (versions étrangères).",
+                'keywords'            => ['traduction', 'traduire', 'langue', 'anglais', 'allemand', 'espagnol', 'polonais', 'non traduit', 'version étrangère'],
+                'parent_slug'         => null,
+                'is_visible_to_users' => false,
+            ],
+            [
+                'glpi_category_id'    => 33,
+                'slug'                => 'tech_bug_forfait',
+                'label'               => '[TECHNIQUE] Bug Forfait',
+                'label_simple'        => 'Problème de forfait',
+                'description'         => "Anomalie sur le forfait / l'abonnement d'un client : quota d'annonces, options, durée ou droits incorrects.",
+                'keywords'            => ['forfait', 'abonnement', 'quota', 'option', 'pack', 'nombre d\'annonces', 'limite'],
+                'parent_slug'         => null,
+                'is_visible_to_users' => false,
+            ],
+            [
+                'glpi_category_id'    => 37,
+                'slug'                => 'tech_bug_depot',
+                'label'               => '[TECHNIQUE] Bug dépôt',
+                'label_simple'        => "Dépôt d'annonce impossible",
+                'description'         => "Erreur lors du dépôt ou de la modification manuelle d'une annonce par le client.",
+                'keywords'            => ['dépôt', 'déposer', 'déposer une annonce', 'créer une annonce', 'formulaire annonce', 'enregistrer annonce'],
+                'parent_slug'         => null,
+                'is_visible_to_users' => false,
+            ],
+            [
+                'glpi_category_id'    => 38,
+                'slug'                => 'tech_bug_fiche_tech',
+                'label'               => '[TECHNIQUE] Bug fiche tech',
+                'label_simple'        => 'Fiche technique erronée',
+                'description'         => "Fiche technique d'un véhicule ou matériel incorrecte, incomplète ou mal affichée (caractéristiques, marque, modèle).",
+                'keywords'            => ['fiche technique', 'fiche tech', 'caractéristiques', 'spécifications', 'marque', 'modèle', 'puissance'],
+                'parent_slug'         => null,
+                'is_visible_to_users' => false,
+            ],
+            [
+                'glpi_category_id'    => 40,
+                'slug'                => 'tech_paiement',
+                'label'               => '[TECHNIQUE] Paiement',
+                'label_simple'        => 'Problème de paiement',
+                'description'         => "Paiement en ligne refusé, en échec ou non pris en compte (carte, prélèvement, plateforme de paiement).",
+                'keywords'            => ['paiement', 'payer', 'carte bancaire', 'cb', 'prélèvement', 'transaction', 'refusé', 'stripe'],
+                'parent_slug'         => null,
+                'is_visible_to_users' => false,
+            ],
         ];
 
         foreach ($categories as $catData) {
@@ -322,7 +379,7 @@ class CategorySeeder extends Seeder
                 [
                     ...$catData,
                     'organization_id' => $org->id,
-                    'is_active'       => true,
+                    'is_active'       => $catData['is_active'] ?? true,
                 ]
             );
         }
@@ -331,6 +388,6 @@ class CategorySeeder extends Seeder
         $hidden  = collect($categories)->where('is_visible_to_users', false)->count();
 
         $this->command->info("✓ {$org->name} : " . count($categories) . " catégories ({$visible} visibles commerciaux / {$hidden} IA uniquement).");
-        $this->command->info("  IDs GLPI réels mappés (récupérés le 2026-04-04 via GET /ITILCategory).");
+        $this->command->info("  IDs GLPI vérifiés le 2026-10-03 contre l'export GLPI (35 catégories).");
     }
 }

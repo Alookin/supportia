@@ -2,10 +2,10 @@
     <x-slot name="header">
         <div>
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                Mes tickets
+                {{ $teamView ? $title : 'Mes tickets' }}
             </h2>
             <p class="mt-0.5 text-sm text-gray-500">
-                Tous les tickets que vous avez créés via Zeno
+                {{ $teamView ? 'Tickets créés via Zeno par les membres concernés' : 'Tous les tickets que vous avez créés via Zeno' }}
             </p>
         </div>
     </x-slot>
@@ -128,6 +128,9 @@
                             <thead class="bg-gray-50 border-b border-gray-100">
                                 <tr>
                                     <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Date</th>
+                                    @if($teamView)
+                                        <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Auteur</th>
+                                    @endif
                                     <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Client</th>
                                     <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Titre</th>
                                     <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Catégorie</th>
@@ -186,6 +189,12 @@
                                             <span class="text-gray-600 text-xs font-medium">{{ $ticket->created_at->setTimezone('Europe/Paris')->format('d/m/Y') }}</span>
                                             <span class="text-gray-400 text-xs ml-1">{{ $ticket->created_at->setTimezone('Europe/Paris')->format('H:i') }}</span>
                                         </td>
+
+                                        @if($teamView)
+                                            <td class="px-4 py-3 whitespace-nowrap text-gray-700 text-sm">
+                                                {{ $ticket->user?->name ?? '—' }}
+                                            </td>
+                                        @endif
 
                                         <td class="px-4 py-3 whitespace-nowrap max-w-[130px] truncate text-gray-700 text-sm" title="{{ $ticket->client_name }}">
                                             {{ $ticket->client_name ?: '—' }}

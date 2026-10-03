@@ -13,6 +13,7 @@ class SupportTicket extends Model
     protected $fillable = [
         'organization_id',
         'user_id',
+        'team_id',
         'client_identifier',
         'client_name',
         'client_ids',
@@ -67,6 +68,11 @@ class SupportTicket extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function team(): BelongsTo
+    {
+        return $this->belongsTo(Team::class);
+    }
+
     public function aiRequestLogs(): HasMany
     {
         return $this->hasMany(AiRequestLog::class, 'support_ticket_id');
@@ -100,6 +106,40 @@ class SupportTicket extends Model
     }
 
     // ─── Scopes ─────────────────────────────────────────
+
+    /**
+     * Tickets visibles par un utilisateur (toujours limités à son organisation) :
+     * - admin       : tous les tickets de l'organisation
+     * - admin équipe: les tickets de son équipe + les siens
+     * - membre      : uniquement les siens
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        $query->where('organization_id', $user->organization_id);
+
+        if ($user->isAdmin()) {
+            return $query;
+        }
+
+        if ($user->isTeamAdmin()) {
+            return $query->where(fn (Builder $q) => $q
+                ->where('team_id', $user->team_id)
+                ->orWhere('user_id', $user->id));
+        }
+
+        return $query->where('user_id', $user->id);
+    }
+
+    public function isVisibleTo(User $user): bool
+    {
+        if ((int) $this->organization_id !== (int) $user->organization_id) {
+            return false;
+        }
+
+        return (int) $this->user_id === (int) $user->id
+            || $user->isAdmin()
+            || ($user->isTeamAdmin() && $this->team_id !== null && (int) $this->team_id === (int) $user->team_id);
+    }
 
     /**
      * Tickets en attente de création GLPI (pour le job de retry).
