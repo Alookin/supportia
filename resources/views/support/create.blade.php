@@ -49,6 +49,7 @@
                             <div class="flex items-center gap-2 mb-2">
                                 <input type="text"
                                        x-model="client.id"
+                                       @input.debounce.600ms="checkDuplicates()"
                                        placeholder="ID client *"
                                        class="w-28 px-3 py-2 border border-gray-200 rounded-lg text-sm
                                               focus:ring-2 focus:ring-blue-500 focus:border-blue-500
@@ -81,6 +82,28 @@
                             Ajouter un autre client
                         </button>
                     </div>
+
+                    {{-- Alerte doublon --}}
+                    <template x-if="isSpecificClient && duplicates.length > 0">
+                        <div class="mt-2 mb-1 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                            <p class="font-semibold text-amber-800 mb-1">Un ticket est déjà ouvert pour ce client</p>
+                            <ul class="space-y-1">
+                                <template x-for="(d, i) in duplicates" :key="i">
+                                    <li class="text-amber-700">
+                                        <template x-if="d.visible">
+                                            <span>Client <span x-text="d.clientId"></span> :
+                                                <a :href="d.url" class="underline font-medium" x-text="d.title"></a>
+                                                (<span x-text="d.age"></span>) — vous pouvez y ajouter un commentaire.</span>
+                                        </template>
+                                        <template x-if="!d.visible">
+                                            <span>Client <span x-text="d.clientId"></span> : un collègue a ouvert un ticket <span x-text="d.age"></span>.</span>
+                                        </template>
+                                    </li>
+                                </template>
+                            </ul>
+                            <p class="text-xs text-amber-700 mt-1">Si c'est un problème différent, continuez normalement.</p>
+                        </div>
+                    </template>
 
                     {{-- Contexte libre si pas de client spécifique --}}
                     <div x-show="!isSpecificClient" x-transition>
@@ -393,6 +416,7 @@ function supportForm() {
         description: '',
         isSpecificClient: true,
         clients: [{ uid: 1, id: '', name: '' }],
+        duplicates: [],
         context: '',
         attachments: [],    // [{file, name, size, preview}]
         error: null,
@@ -419,6 +443,21 @@ function supportForm() {
         },
 
         // ─── Gestion des clients ─────────────────────────────────
+        // ─── Doublons : tickets encore ouverts pour ces clients ──
+        async checkDuplicates() {
+            const ids = [...new Set(this.clients.map(c => c.id.trim()).filter(Boolean))];
+            const found = [];
+            for (const id of ids) {
+                try {
+                    const resp = await fetch(`/support/tickets/open-for-client?client_id=${encodeURIComponent(id)}`, { headers: { 'Accept': 'application/json' } });
+                    if (!resp.ok) continue;
+                    const data = await resp.json();
+                    data.tickets.forEach(t => found.push({ ...t, clientId: id }));
+                } catch (e) { /* non bloquant */ }
+            }
+            this.duplicates = found;
+        },
+
         addClient() {
             if (this.clients.length < 10) this.clients.push({ uid: Date.now(), id: '', name: '' });
         },
@@ -623,6 +662,7 @@ function supportForm() {
             this.description = '';
             this.isSpecificClient = true;
             this.clients = [{ uid: Date.now(), id: '', name: '' }];
+            this.duplicates = [];
             this.context = '';
             this.attachments = [];
             this.error = null;

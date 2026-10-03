@@ -14,6 +14,18 @@
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-8">
 
             {{-- ── 4 cartes stats ─────────────────────────────────── --}}
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-4 mb-5 flex flex-wrap items-center gap-x-6 gap-y-1">
+                <p class="text-sm font-semibold text-gray-700">Précision de l'IA</p>
+                @if($aiAccuracy !== null)
+                    <p class="text-sm text-gray-600">
+                        <span class="text-2xl font-extrabold {{ $aiAccuracy >= 80 ? 'text-emerald-600' : ($aiAccuracy >= 60 ? 'text-amber-600' : 'text-red-600') }}">{{ $aiAccuracy }} %</span>
+                        des catégories proposées par Zeno conservées par le support ({{ $aiAccuracyCount }} ticket{{ $aiAccuracyCount > 1 ? 's' : '' }} vérifié{{ $aiAccuracyCount > 1 ? 's' : '' }} dans GLPI)
+                    </p>
+                @else
+                    <p class="text-sm text-gray-500">Pas encore de ticket vérifié dans GLPI (synchronisation toutes les 10 min).</p>
+                @endif
+            </div>
+
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-5">
 
                 {{-- Total --}}

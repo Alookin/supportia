@@ -57,6 +57,11 @@
         </style>
         @endif
 
+        <script>
+            // Thème : sombre par défaut, choix mémorisé (avant le rendu pour éviter le flash blanc)
+            try { if ((localStorage.getItem('zeno-theme') || 'dark') === 'dark') document.documentElement.classList.add('dark'); }
+            catch (e) { document.documentElement.classList.add('dark'); }
+        </script>
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>

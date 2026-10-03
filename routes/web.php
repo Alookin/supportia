@@ -40,11 +40,12 @@ Route::middleware(['auth', 'org.active'])->prefix('support')->group(function () 
     Route::get('/dashboard', [SupportDashboardController::class, 'index'])->name('support.dashboard');
     Route::get('/mes-tickets', [SupportDashboardController::class, 'myTickets'])->name('support.my-tickets');
     Route::get('/equipe', [SupportDashboardController::class, 'teamTickets'])->name('support.team-tickets');
-    Route::get('/tickets/{id}', [SupportDashboardController::class, 'show'])->name('support.ticket-detail');
+    Route::get('/tickets/{id}', [SupportDashboardController::class, 'show'])->whereNumber('id')->name('support.ticket-detail');
     Route::post('/tickets/{id}/comment', [SupportDashboardController::class, 'addComment'])->name('support.ticket-comment');
     Route::get('/tickets/{id}/attachments/{attachmentId}', [SupportDashboardController::class, 'downloadAttachment'])->name('support.ticket-attachment');
     Route::get('/demo', fn() => view('support.demo'))->name('support.demo');
 
+    Route::get('/tickets/open-for-client', [SupportTicketController::class, 'openForClient'])->middleware('throttle:60,1')->name('support.open-for-client');
     Route::get('/tickets', [SupportTicketController::class, 'index']);
     Route::post('/tickets', [SupportTicketController::class, 'store'])->middleware('throttle:20,1');
     Route::post('/tickets/{ticket}/confirm', [SupportTicketController::class, 'confirm'])->middleware('throttle:20,1');

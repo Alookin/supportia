@@ -30,6 +30,9 @@ class SupportTicket extends Model
         'glpi_created_at',
         'glpi_retry_count',
         'glpi_last_error',
+        'glpi_category_id_final',
+        'resolved_notified_at',
+        'glpi_synced_at',
         'was_modified_by_user',
         'status',
     ];
@@ -40,6 +43,8 @@ class SupportTicket extends Model
         'ai_confidence'        => 'float',
         'glpi_ticket_id'       => 'integer',
         'glpi_created_at'      => 'datetime',
+        'resolved_notified_at' => 'datetime',
+        'glpi_synced_at'       => 'datetime',
         'glpi_retry_count'     => 'integer',
         'was_modified_by_user' => 'boolean',
     ];
@@ -161,7 +166,8 @@ class SupportTicket extends Model
             ->where('slug', $this->ai_category_slug)
             ->first();
 
-        if (! $category?->median_resolution_seconds || $category->resolution_sample_count < 5) {
+        if (! $category?->median_resolution_seconds || $category->resolution_sample_count < 5
+            || $category->median_resolution_seconds > config('supportia.estimate_max_hours', 120) * 3600) {
             return null;
         }
 

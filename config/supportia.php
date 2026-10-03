@@ -45,6 +45,14 @@ return [
     // Les lectures (statistiques, export) restent réelles. Ignoré en production.
     'glpi_dry_run' => (bool) env('GLPI_DRY_RUN', false),
 
+    // Prévenir le demandeur par email quand son ticket est résolu dans GLPI
+    // (désactiver si les notifications GLPI le font déjà, pour éviter les doublons).
+    'notify_resolved' => (bool) env('ZENO_NOTIFY_RESOLVED', true),
+
+    // Au-delà, le délai habituel n'est pas affiché au commercial (médianes de 12 à 21 jours
+    // sur Bug mails, Traductions, Évolutions : décourageant et peu informatif).
+    'estimate_max_hours' => (int) env('ZENO_ESTIMATE_MAX_HOURS', 120),
+
     /*
     |--------------------------------------------------------------------------
     | Pièces jointes

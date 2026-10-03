@@ -123,6 +123,36 @@ class GlpiClientService
     }
 
     /**
+     * Statut et catégorie bruts d'un ticket GLPI (synchronisation périodique).
+     * Retourne null si GLPI est indisponible.
+     *
+     * @return array{status: int, category_id: int}|null
+     */
+    public function getTicketCore(Organization $organization, int $glpiTicketId): ?array
+    {
+        if (self::dryRun()) {
+            return null; // mode test : statuts inchangés
+        }
+
+        try {
+            $data = $this->decodeJson($this->get($organization, "/Ticket/{$glpiTicketId}", [], 30)->body());
+        } catch (\Throwable $e) {
+            Log::warning('[GLPI] getTicketCore failed', ['glpi_ticket_id' => $glpiTicketId, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+
+        if (! isset($data['id'], $data['status'])) {
+            return null;
+        }
+
+        return [
+            'status'      => (int) $data['status'],
+            'category_id' => (int) ($data['itilcategories_id'] ?? 0),
+        ];
+    }
+
+    /**
      * Récupère le statut temps réel d'un ticket GLPI : statut, technicien, followups.
      *
      * Retourne null si GLPI est indisponible (sans lever d'exception).

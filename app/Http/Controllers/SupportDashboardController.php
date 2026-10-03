@@ -45,6 +45,19 @@ class SupportDashboardController extends Controller
             ? round($autoClassified / $totalTickets * 100)
             : 0;
 
+        // ─── Précision de l'IA : catégorie Zeno vs catégorie finale dans GLPI ───
+        // (le technicien a pu la corriger ; renseignée par glpi:sync-ticket-statuses)
+        $slugToGlpiId = $org
+            ? GlpiCategoryMap::where('organization_id', $orgId)->pluck('glpi_category_id', 'slug')
+            : collect();
+        $checked = SupportTicket::visibleTo($user)
+            ->where('glpi_category_id_final', '>', 0)
+            ->get(['ai_category_slug', 'glpi_category_id_final']);
+        $aiAccuracyCount = $checked->count();
+        $aiAccuracy = $aiAccuracyCount > 0
+            ? (int) round($checked->filter(fn ($t) => (int) $slugToGlpiId->get($t->ai_category_slug) === (int) $t->glpi_category_id_final)->count() / $aiAccuracyCount * 100)
+            : null;
+
         // ─── Top 5 categories (horizontal bar chart) ─────────────
         $topCategories = SupportTicket::visibleTo($user)
             ->whereNotNull('ai_category_slug')
@@ -142,6 +155,8 @@ class SupportDashboardController extends Controller
             'todayTickets',
             'autoClassified',
             'autoRate',
+            'aiAccuracy',
+            'aiAccuracyCount',
             'topCategoryLabel',
             'topCategories',
             'maxCategoryCount',
