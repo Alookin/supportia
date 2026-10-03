@@ -200,7 +200,7 @@ class SupportTicketController extends Controller
 
         $hasChanges = false;
         foreach ($fieldMap as $input => $field) {
-            if (isset($validated[$input])) {
+            if (isset($validated[$input]) && (string) $validated[$input] !== (string) $ticket->$field) {
                 $ticket->$field = $validated[$input];
                 $hasChanges = true;
             }

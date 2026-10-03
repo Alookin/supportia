@@ -87,10 +87,12 @@ class AIClassifierService
 
         try {
             $start = microtime(true);
-            $result = $this->callClaude($organization, $prompt);
+            $result = config('supportia.ai_provider') === 'local'
+                ? $this->callLocal($prompt)
+                : $this->callClaude($organization, $prompt);
             $latencyMs = (int) ((microtime(true) - $start) * 1000);
 
-            $result['provider'] = 'claude';
+            $result['provider'] = config('supportia.ai_provider') === 'local' ? 'local' : 'claude';
             $result['_meta']    = ['latency_ms' => $latencyMs, 'error' => null] + ($result['_meta'] ?? []);
 
             if ($ticket) {
@@ -99,7 +101,8 @@ class AIClassifierService
 
             return $result;
         } catch (\Throwable $e) {
-            Log::warning('Claude API failed, using keyword fallback', [
+            Log::warning('AI classification failed, using keyword fallback', [
+                'provider'     => config('supportia.ai_provider'),
                 'organization' => $organization->slug,
                 'error'        => $e->getMessage(),
             ]);
@@ -192,9 +195,53 @@ PROMPT;
         $response->throw();
 
         $data = $response->json();
-        $text = $data['content'][0]['text'] ?? '';
 
-        // Extraire le JSON de la réponse (Claude peut ajouter du texte autour)
+        return $this->parseClassification($data['content'][0]['text'] ?? '', [
+            'model'             => (string) config('supportia.claude_model'),
+            'prompt_tokens'     => $data['usage']['input_tokens'] ?? null,
+            'completion_tokens' => $data['usage']['output_tokens'] ?? null,
+        ]);
+    }
+
+    /**
+     * Appelle un modèle local via une API compatible OpenAI (Ollama, LM Studio…).
+     */
+    private function callLocal(string $prompt): array
+    {
+        $model = config('supportia.local_ai.model');
+
+        if (empty($model)) {
+            throw new \RuntimeException('LOCAL_AI_MODEL non configuré');
+        }
+
+        $response = Http::timeout(config('supportia.ai_timeout', 25))
+            ->when(config('supportia.local_ai.api_key'), fn ($h, $key) => $h->withToken($key))
+            ->post(rtrim((string) config('supportia.local_ai.base_url'), '/') . '/chat/completions', [
+                'model'       => $model,
+                'temperature' => 0,
+                'messages'    => [
+                    ['role' => 'system', 'content' => 'Tu réponds uniquement par un objet JSON valide, sans texte autour.'],
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+            ]);
+
+        $response->throw();
+
+        $data = $response->json();
+
+        return $this->parseClassification($data['choices'][0]['message']['content'] ?? '', [
+            'model'             => $model,
+            'prompt_tokens'     => $data['usage']['prompt_tokens'] ?? null,
+            'completion_tokens' => $data['usage']['completion_tokens'] ?? null,
+        ]);
+    }
+
+    /**
+     * Extrait et normalise le JSON de classification renvoyé par le modèle.
+     */
+    private function parseClassification(string $text, array $meta): array
+    {
+        // Le modèle peut ajouter du texte (ou un bloc ```json) autour
         if (! preg_match('/\{[\s\S]*\}/', $text, $matches)) {
             throw new \RuntimeException(
                 'Impossible de parser la réponse IA : ' . mb_substr($text, 0, 200)
@@ -204,10 +251,7 @@ PROMPT;
         $result = json_decode($matches[0], true, 512, JSON_THROW_ON_ERROR);
 
         return [
-            '_meta'         => [
-                'prompt_tokens'     => $data['usage']['input_tokens'] ?? null,
-                'completion_tokens' => $data['usage']['output_tokens'] ?? null,
-            ],
+            '_meta'         => $meta,
             'title'         => mb_substr($result['title'] ?? 'Ticket sans titre', 0, 500),
             'body'          => $result['body'] ?? $text,
             'category_slug' => $result['category_slug'] ?? 'autre',
@@ -267,7 +311,7 @@ PROMPT;
             AiRequestLog::create([
                 'support_ticket_id' => $ticket->id,
                 'provider'          => $classification['provider'] ?? 'unknown',
-                'model'             => ($classification['provider'] ?? null) === 'claude' ? (string) config('supportia.claude_model') : 'keywords',
+                'model'             => $meta['model'] ?? 'keywords',
                 'prompt_tokens'     => $meta['prompt_tokens'] ?? null,
                 'completion_tokens' => $meta['completion_tokens'] ?? null,
                 'latency_ms'        => $meta['latency_ms'] ?? 0,

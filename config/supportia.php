@@ -7,6 +7,15 @@ return [
     | Claude API
     |--------------------------------------------------------------------------
     */
+    // Moteur de classification : « claude » (API Anthropic) ou « local » (serveur compatible
+    // OpenAI : Ollama → http://127.0.0.1:11434/v1, LM Studio → http://127.0.0.1:1234/v1).
+    'ai_provider' => env('AI_PROVIDER', 'claude'),
+    'local_ai' => [
+        'base_url' => env('LOCAL_AI_BASE_URL', 'http://127.0.0.1:11434/v1'),
+        'model'    => env('LOCAL_AI_MODEL'),
+        'api_key'  => env('LOCAL_AI_API_KEY'),
+    ],
+
     'claude_api_key' => env('CLAUDE_API_KEY'),
     'claude_model' => env('CLAUDE_MODEL', 'claude-sonnet-4-20250514'),
     // Sonnet met souvent plus de 5 s à répondre : un timeout trop court déclenche le fallback mots-clés

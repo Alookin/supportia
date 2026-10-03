@@ -126,10 +126,10 @@
                     <div>
                         <dt class="text-xs font-semibold uppercase tracking-wider text-gray-400">Classification</dt>
                         <dd class="mt-1">
-                            @if($ticket->ai_provider === 'claude')
+                            @if(in_array($ticket->ai_provider, ['claude', 'local'], true))
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 ring-1 ring-blue-200">
                                     <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                                    Claude IA
+                                    {{ $ticket->ai_provider === 'local' ? 'IA locale' : 'Claude IA' }}
                                 </span>
                             @elseif($ticket->ai_provider)
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">

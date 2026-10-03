@@ -20,7 +20,7 @@ class GlpiClientService
     public function createTicket(Organization $organization, array $ticketData): array
     {
         if (self::dryRun()) {
-            $id = 900000 + (int) Cache::increment('glpi_dry_run_ticket_seq');
+            $id = max(900000, (int) \App\Models\SupportTicket::where('glpi_ticket_id', '>=', 900000)->max('glpi_ticket_id') + 1);
             Log::info('[GLPI simulation] Ticket non envoyé', ['fake_id' => $id, 'content' => $this->formatContent($ticketData)] + $ticketData);
 
             return ['id' => $id, 'url' => $this->ticketUrl($organization, $id)];

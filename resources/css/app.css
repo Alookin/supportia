@@ -3,3 +3,30 @@
 @tailwind utilities;
 
 [x-cloak] { display: none !important; }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Couche de contraste Zeno (03/10/2026)
+   L'interface d'origine (gris très clairs) manquait de contraste. Plutôt que de
+   retoucher chaque vue, on assombrit ici les gris Tailwind les plus utilisés.
+   Supprimer ce bloc = retour au rendu d'origine.
+   ───────────────────────────────────────────────────────────────────────────── */
+.zeno-page { background-color: #e6ebf2; }
+
+.text-gray-400 { color: #64748b; }   /* était #9ca3af */
+.text-gray-500 { color: #475569; }   /* était #6b7280 */
+.text-gray-600 { color: #334155; }   /* était #4b5563 */
+.text-gray-700 { color: #1e293b; }   /* était #374151 */
+
+.border-gray-100 { border-color: #d5dce6; }
+.border-gray-200 { border-color: #c5cdd9; }
+.divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #dfe4ec; }
+
+.bg-gray-50  { background-color: #f1f4f9; }
+.bg-gray-100 { background-color: #e9edf3; }
+
+.shadow-sm { box-shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 2px 6px rgba(15, 23, 42, .06); }
+
+/* Champs de formulaire : bordure visible */
+input[type="text"], input[type="email"], input[type="password"], textarea, select {
+    border-color: #b8c2d0;
+}

@@ -20,10 +20,10 @@
             </div>
             <template x-if="result && result.provider">
                 <span class="ml-auto text-xs px-2 py-1 rounded-md font-semibold"
-                      :class="result.provider === 'claude'
+                      :class="['claude', 'local'].includes(result.provider)
                           ? 'bg-blue-50 text-blue-700'
                           : 'bg-amber-50 text-amber-700'"
-                      x-text="(result.provider === 'claude' ? 'Claude' : 'Fallback')
+                      x-text="(result.provider === 'claude' ? 'Claude' : (result.provider === 'local' ? 'IA locale' : 'Fallback'))
                               + ' · ' + latency + 's'">
                 </span>
             </template>
@@ -45,7 +45,7 @@
 
                     {{-- Champs clients dynamiques --}}
                     <div x-show="isSpecificClient" x-transition>
-                        <template x-for="(client, index) in clients" :key="index">
+                        <template x-for="(client, index) in clients" :key="client.uid">
                             <div class="flex items-center gap-2 mb-2">
                                 <input type="text"
                                        x-model="client.id"
@@ -263,8 +263,9 @@
                     <select x-model="editResult.category_slug"
                             class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm
                                    focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
-                        <template x-for="cat in categories.filter(c => c.is_visible_to_users)" :key="cat.slug">
-                            <option :value="cat.slug" x-text="cat.label_simple || cat.label"></option>
+                        <template x-for="cat in categories.filter(c => c.is_visible_to_users || c.slug === editResult.category_slug)" :key="cat.slug">
+                            <option :value="cat.slug" :selected="cat.slug === editResult.category_slug"
+                                    x-text="cat.label_simple || cat.label"></option>
                         </template>
                     </select>
                 </div>
@@ -391,7 +392,7 @@ function supportForm() {
         // Inputs
         description: '',
         isSpecificClient: true,
-        clients: [{ id: '', name: '' }],
+        clients: [{ uid: 1, id: '', name: '' }],
         context: '',
         attachments: [],    // [{file, name, size, preview}]
         error: null,
@@ -419,7 +420,7 @@ function supportForm() {
 
         // ─── Gestion des clients ─────────────────────────────────
         addClient() {
-            if (this.clients.length < 10) this.clients.push({ id: '', name: '' });
+            if (this.clients.length < 10) this.clients.push({ uid: Date.now(), id: '', name: '' });
         },
 
         removeClient(index) {
@@ -621,7 +622,7 @@ function supportForm() {
             this.state = 'form';
             this.description = '';
             this.isSpecificClient = true;
-            this.clients = [{ id: '', name: '' }];
+            this.clients = [{ uid: Date.now(), id: '', name: '' }];
             this.context = '';
             this.attachments = [];
             this.error = null;
@@ -650,7 +651,7 @@ function supportForm() {
         },
 
         priorityLabel(p) {
-            return { 1: 'Très basse', 2: 'Basse', 3: 'Moyenne', 4: 'Haute', 5: 'Très haute' }[p] || 'Moyenne';
+            return { 1: 'Très basse', 2: 'Basse', 3: 'Normale', 4: 'Haute', 5: 'Critique' }[p] || 'Normale';
         },
 
         priorityEmoji(p) {
