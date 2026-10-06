@@ -253,7 +253,7 @@
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
 
                 {{-- En-tête --}}
-                <div class="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-gray-100">
+                <div id="conversation" class="scroll-mt-4 flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-gray-100">
                     <div>
                         <h2 class="text-sm font-semibold text-gray-700">Conversation</h2>
                         @if($glpiStatus['assigned_to'] ?? null)
@@ -272,7 +272,7 @@
                                 Résolu le {{ $resolutionDate->translatedFormat('d F Y à H:i') }}
                             </span>
                         @endif
-                        @if($glpiUrl)
+                        @if($glpiUrl && auth()->user()->canSupervise())
                             <a href="{{ $glpiUrl }}" target="_blank"
                                class="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors">
                                 Voir dans GLPI
@@ -357,6 +357,31 @@
                     @endif
                 </div>
 
+                {{-- Clôture par le commercial --}}
+                @if($ticket->status === 'created' && $ticket->glpi_ticket_id)
+                    <div x-data="{ ask: false }" class="mx-6 mb-3 flex flex-wrap items-center justify-end gap-2 text-sm">
+                        <button type="button" x-show="!ask" @click="ask = true"
+                                class="px-3 py-1.5 rounded-full text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-medium transition-colors">
+                            ✓ Le problème est résolu
+                        </button>
+                        <form x-show="ask" x-cloak method="POST" action="{{ route('support.ticket-resolve', $ticket->id) }}"
+                              class="flex flex-wrap items-center justify-end gap-2">
+                            @csrf
+                            <span class="text-gray-600">Clôturer ce ticket dans GLPI ?</span>
+                            <button type="submit" class="px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium">Oui, clôturer</button>
+                            <button type="button" @click="ask = false" class="px-3 py-1.5 rounded-full text-gray-600 hover:bg-gray-100">Annuler</button>
+                        </form>
+                    </div>
+                @endif
+                @if(session('ticket_resolved'))
+                    <div class="mx-6 mb-3 px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-lg text-sm text-emerald-700">
+                        Ticket clôturé : le support a été informé que le problème est résolu.
+                    </div>
+                @endif
+                @error('resolve')
+                    <div class="mx-6 mb-3 px-4 py-2 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">{{ $message }}</div>
+                @enderror
+
                 {{-- Flash commentaire ajouté --}}
                 @if(session('comment_added'))
                     <div class="mx-6 px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-lg text-sm text-emerald-700">
@@ -410,7 +435,8 @@
                                       rows="2"
                                       placeholder="Répondre au support..."
                                       x-model="msg"
-                                      class="flex-1 rounded-2xl border border-gray-200 px-4 py-2.5 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none"></textarea>
+                                      @input="$el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight, 260) + 'px'"
+                                      class="flex-1 max-h-[260px] overflow-y-auto rounded-2xl border border-gray-200 px-4 py-2.5 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none"></textarea>
 
                             {{-- Bouton envoyer --}}
                             <button type="submit"

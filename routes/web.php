@@ -30,6 +30,9 @@ Route::middleware('auth')->group(function () {
 
 require __DIR__.'/auth.php';
 
+// /logout tapé dans la barre d'adresse : pas de page d'erreur (la déconnexion reste en POST)
+Route::get('/logout', fn () => redirect()->route('dashboard'))->middleware('auth');
+
 Route::middleware(['auth', 'org.active'])->prefix('support')->group(function () {
     Route::get('/', function () {
         $user       = auth()->user();
@@ -42,6 +45,7 @@ Route::middleware(['auth', 'org.active'])->prefix('support')->group(function () 
     Route::get('/equipe', [SupportDashboardController::class, 'teamTickets'])->name('support.team-tickets');
     Route::get('/tickets/{id}', [SupportDashboardController::class, 'show'])->whereNumber('id')->name('support.ticket-detail');
     Route::post('/tickets/{id}/comment', [SupportDashboardController::class, 'addComment'])->name('support.ticket-comment');
+    Route::post('/tickets/{id}/resolve', [SupportDashboardController::class, 'resolve'])->whereNumber('id')->name('support.ticket-resolve');
     Route::get('/tickets/{id}/attachments/{attachmentId}', [SupportDashboardController::class, 'downloadAttachment'])->name('support.ticket-attachment');
     Route::get('/demo', fn() => view('support.demo'))->name('support.demo');
 

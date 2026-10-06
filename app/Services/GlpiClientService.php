@@ -164,11 +164,13 @@ class GlpiClientService
     public function getTicketStatus(Organization $organization, int $glpiTicketId): ?array
     {
         if (self::dryRun() && $glpiTicketId >= 900000) {
+            $solvedAt = Cache::get("glpi_dryrun_solved_{$glpiTicketId}");
+
             return [
-                'status'          => 2,
-                'status_label'    => 'En cours',
+                'status'          => $solvedAt ? 5 : 2,
+                'status_label'    => $solvedAt ? 'Résolu' : 'En cours',
                 'assigned_to'     => 'Technicien (simulation)',
-                'resolution_date' => null,
+                'resolution_date' => $solvedAt,
                 'followups'       => [],
             ];
         }
@@ -349,6 +351,55 @@ class GlpiClientService
      * Retourne true si le followup a été créé, false si GLPI est indisponible.
      * Jamais d'exception : échec silencieux (le commentaire Zeno est déjà sauvegardé).
      */
+    /**
+     * Marque le ticket « Résolu » dans GLPI en ajoutant une solution (POST /ITILSolution) :
+     * GLPI passe alors le ticket au statut 5 lui-même, comme si un technicien l'avait résolu.
+     * À vérifier sur l'instance réelle : droit « Résoudre » du compte API.
+     */
+    public function solveTicket(Organization $organization, int $glpiTicketId, string $content): bool
+    {
+        if (self::dryRun()) {
+            Log::info('[GLPI simulation] Résolution non envoyée', ['glpi_ticket_id' => $glpiTicketId]);
+            Cache::put("glpi_dryrun_solved_{$glpiTicketId}", now()->toDateTimeString(), now()->addDays(7));
+
+            return true;
+        }
+
+        if (! $organization->hasGlpiConfig()) {
+            return false;
+        }
+
+        $payload = ['input' => [
+            'itemtype' => 'Ticket',
+            'items_id' => $glpiTicketId,
+            'content'  => nl2br(e($content)),
+        ]];
+
+        try {
+            $sessionToken = $this->getSessionToken($organization);
+            $response = $this->http()
+                ->withHeaders($this->headers($organization, $sessionToken))
+                ->post($this->url($organization, '/ITILSolution'), $payload);
+
+            if ($response->status() === 401) {
+                $this->clearSessionToken($organization);
+                $sessionToken = $this->getSessionToken($organization);
+                $response = $this->http()
+                    ->withHeaders($this->headers($organization, $sessionToken))
+                    ->post($this->url($organization, '/ITILSolution'), $payload);
+            }
+
+            Log::info('[GLPI] solveTicket', ['glpi_ticket_id' => $glpiTicketId, 'status' => $response->status()]);
+            Cache::forget("glpi_ticket_status_{$organization->id}_{$glpiTicketId}");
+
+            return $response->successful();
+        } catch (\Throwable $e) {
+            Log::warning('[GLPI] solveTicket failed', ['glpi_ticket_id' => $glpiTicketId, 'error' => $e->getMessage()]);
+
+            return false;
+        }
+    }
+
     public function addFollowup(Organization $organization, int $glpiTicketId, string $content): bool
     {
         if (self::dryRun()) {

@@ -287,7 +287,7 @@ class SupportDashboardController extends Controller
             }
         }
 
-        return redirect()->route('support.ticket-detail', $id)
+        return redirect()->to(route('support.ticket-detail', $id) . '#conversation')
             ->with('comment_added', true);
     }
 
@@ -380,5 +380,36 @@ class SupportDashboardController extends Controller
         }
 
         return Storage::disk('local')->download($attachment->path, $attachment->original_name);
+    }
+
+    /**
+     * Le commercial (ou son responsable) indique que le problème est résolu :
+     * solution ajoutée dans GLPI (statut « Résolu »), puis statut local mis à jour.
+     */
+    public function resolve(Request $request, int $id): RedirectResponse
+    {
+        $user   = $request->user();
+        $ticket = SupportTicket::findOrFail($id);
+
+        $this->authorize('addComment', $ticket);
+
+        if ($ticket->status !== 'created' || ! $ticket->glpi_ticket_id) {
+            return back()->withErrors(['resolve' => 'Ce ticket ne peut pas être clôturé.']);
+        }
+
+        $note = trim((string) $request->input('note', ''));
+        $text = "Problème résolu — confirmé par {$user->name} depuis Zeno." . ($note !== '' ? "\n\n{$note}" : '');
+
+        $ok = app(GlpiClientService::class)->solveTicket($user->organization, (int) $ticket->glpi_ticket_id, $text);
+
+        if (! $ok) {
+            return redirect()->to(route('support.ticket-detail', $id) . '#conversation')
+                ->withErrors(['resolve' => "GLPI n'a pas accepté la clôture. Réessayez plus tard ou prévenez le support."]);
+        }
+
+        $ticket->update(['status' => 'resolved', 'glpi_status' => 5]);
+
+        return redirect()->to(route('support.ticket-detail', $id) . '#conversation')
+            ->with('ticket_resolved', true);
     }
 }
