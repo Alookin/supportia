@@ -14,6 +14,18 @@
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-8">
 
             {{-- ── 4 cartes stats ─────────────────────────────────── --}}
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-4 mb-5 flex flex-wrap items-center gap-x-6 gap-y-1">
+                <p class="text-sm font-semibold text-gray-700">Précision de l'IA</p>
+                @if($aiAccuracy !== null)
+                    <p class="text-sm text-gray-600">
+                        <span class="text-2xl font-extrabold {{ $aiAccuracy >= 80 ? 'text-emerald-600' : ($aiAccuracy >= 60 ? 'text-amber-600' : 'text-red-600') }}">{{ $aiAccuracy }} %</span>
+                        des catégories proposées par Zeno conservées par le support ({{ $aiAccuracyCount }} ticket{{ $aiAccuracyCount > 1 ? 's' : '' }} vérifié{{ $aiAccuracyCount > 1 ? 's' : '' }} dans GLPI)
+                    </p>
+                @else
+                    <p class="text-sm text-gray-500">Pas encore de ticket vérifié dans GLPI (synchronisation toutes les 10 min).</p>
+                @endif
+            </div>
+
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-5">
 
                 {{-- Total --}}
@@ -203,7 +215,7 @@
             {{-- ── Tableau des 20 derniers tickets ───────────────── --}}
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 class="text-sm font-semibold text-gray-700">20 derniers tickets</h3>
+                    <h3 class="text-sm font-semibold text-gray-700">Derniers tickets</h3>
                     @if($tickets->isNotEmpty())
                         <span class="text-xs text-gray-400">{{ $tickets->count() }} entrée(s)</span>
                     @endif
@@ -244,38 +256,7 @@
                                             default => ['label' => '—',    'class' => 'bg-gray-100 text-gray-400'],
                                         };
 
-                                        $statusConfig = match($ticket->status) {
-                                            'created' => [
-                                                'label' => 'Créé',
-                                                'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200',
-                                                'dot'   => 'bg-emerald-500',
-                                            ],
-                                            'pending' => [
-                                                'label' => 'En attente',
-                                                'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',
-                                                'dot'   => 'bg-yellow-400',
-                                            ],
-                                            'needs_review' => [
-                                                'label' => 'À valider',
-                                                'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',
-                                                'dot'   => 'bg-yellow-400',
-                                            ],
-                                            'queued'  => [
-                                                'label' => 'En file',
-                                                'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',
-                                                'dot'   => 'bg-blue-400',
-                                            ],
-                                            'failed'  => [
-                                                'label' => 'Échec',
-                                                'class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',
-                                                'dot'   => 'bg-red-500',
-                                            ],
-                                            default   => [
-                                                'label' => $ticket->status ?? '—',
-                                                'class' => 'bg-gray-100 text-gray-500',
-                                                'dot'   => 'bg-gray-300',
-                                            ],
-                                        };
+                                        $statusConfig = $ticket->statusBadge();
 
                                         $confidencePct = $ticket->ai_confidence !== null
                                             ? round($ticket->ai_confidence * 100)

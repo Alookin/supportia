@@ -34,16 +34,7 @@
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
                         @php
-                            $statusConfig = match($ticket->status) {
-                                'created' => ['label' => 'Créé',       'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
-                                'pending' => ['label' => 'En attente', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
-                                'needs_review' => ['label' => 'À valider', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
-                                'queued'  => ['label' => 'En file',    'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',         'dot' => 'bg-blue-400'],
-                                'failed'  => ['label' => 'Échec',      'class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',            'dot' => 'bg-red-500'],
-                                'resolved'=> ['label' => 'Résolu',     'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
-                                'closed'  => ['label' => 'Fermé',      'class' => 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',          'dot' => 'bg-gray-500'],
-                                default   => ['label' => $ticket->status ?? '—', 'class' => 'bg-gray-100 text-gray-500', 'dot' => 'bg-gray-300'],
-                            };
+                            $statusConfig = $ticket->statusBadge();
                             $priorityConfig = match($ticket->ai_priority) {
                                 1 => ['label' => 'Très basse', 'class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-200'],
                                 2 => ['label' => 'Basse',      'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200'],
@@ -101,6 +92,7 @@
                         <dt class="text-xs font-semibold uppercase tracking-wider text-gray-400">Commercial</dt>
                         <dd class="mt-1 text-sm text-gray-800">{{ $ticket->user?->name ?? '—' }}</dd>
                     </div>
+                    @if(auth()->user()->canSupervise())
 
                     <div>
                         <dt class="text-xs font-semibold uppercase tracking-wider text-gray-400">Confiance IA</dt>
@@ -122,19 +114,20 @@
                             @endif
                         </dd>
                     </div>
+                    @endif
 
                     <div>
                         <dt class="text-xs font-semibold uppercase tracking-wider text-gray-400">Classification</dt>
                         <dd class="mt-1">
-                            @if($ticket->ai_provider === 'claude')
+                            @if(in_array($ticket->ai_provider, ['claude', 'local'], true))
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 ring-1 ring-blue-200">
                                     <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                                    Claude IA
+                                    Analyse IA
                                 </span>
                             @elseif($ticket->ai_provider)
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
                                     <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
-                                    Fallback mots-clés
+                                    Classement simplifié (mots-clés)
                                 </span>
                             @else
                                 <span class="text-sm text-gray-400">—</span>
@@ -260,7 +253,7 @@
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
 
                 {{-- En-tête --}}
-                <div class="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-gray-100">
+                <div id="conversation" class="scroll-mt-4 flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-gray-100">
                     <div>
                         <h2 class="text-sm font-semibold text-gray-700">Conversation</h2>
                         @if($glpiStatus['assigned_to'] ?? null)
@@ -279,7 +272,7 @@
                                 Résolu le {{ $resolutionDate->translatedFormat('d F Y à H:i') }}
                             </span>
                         @endif
-                        @if($glpiUrl)
+                        @if($glpiUrl && auth()->user()->canSupervise())
                             <a href="{{ $glpiUrl }}" target="_blank"
                                class="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors">
                                 Voir dans GLPI
@@ -300,55 +293,55 @@
 
                 {{-- Zone messages --}}
                 <div id="chat-messages"
-                     class="px-6 py-4 space-y-4"
+                     class="px-6 py-4"
                      style="max-height:500px;overflow-y:auto"
                      x-init="$el.scrollTop = $el.scrollHeight">
                     @if(empty($messages))
                         <p class="text-sm text-gray-400 text-center py-8">Aucun message pour le moment.</p>
                     @else
+                        @php $prevKey = null; @endphp
                         @foreach($messages as $msg)
                             @php
                                 $isCommercial = $msg['type'] === 'commercial';
                                 $isMe         = $isCommercial && $msg['user_id'] === auth()->id();
                                 $authorLabel  = $isMe ? 'Vous' : ($msg['author'] ?? ($isCommercial ? '—' : 'Technicien'));
                                 $initial      = strtoupper(mb_substr($msg['author'] ?? ($isCommercial ? '?' : 'T'), 0, 1));
+                                $msgKey       = $msg['type'] . '|' . ($msg['user_id'] ?? $msg['author'] ?? '');
+                                $sameAsPrev   = $msgKey === $prevKey;
+                                $prevKey      = $msgKey;
+                                $text         = trim((string) ($msg['content'] ?? ''));
                             @endphp
-                            <div class="flex {{ $isCommercial ? 'flex-row-reverse' : 'flex-row' }} items-end gap-2">
-                                <div class="shrink-0 w-8 h-8 rounded-full flex items-center justify-center
+                            <div class="flex {{ $isCommercial ? 'flex-row-reverse' : 'flex-row' }} items-end gap-2 {{ $loop->first ? '' : ($sameAsPrev ? 'mt-1' : 'mt-4') }}">
+                                <div class="shrink-0 w-8 h-8 rounded-full flex items-center justify-center {{ $sameAsPrev ? 'invisible' : '' }}
                                             {{ $isCommercial ? 'bg-blue-600' : 'bg-gray-200' }}">
-                                    <span class="text-xs font-bold {{ $isCommercial ? 'text-white' : 'text-gray-500' }}">
-                                        {{ $initial }}
-                                    </span>
+                                    <span class="text-xs font-bold {{ $isCommercial ? 'text-white' : 'text-gray-500' }}">{{ $initial }}</span>
                                 </div>
-                                <div class="max-w-[75%]">
-                                    <div class="flex {{ $isCommercial ? 'flex-row-reverse' : 'flex-row' }} items-baseline gap-2 mb-1">
-                                        <span class="text-xs font-semibold {{ $isCommercial ? 'text-blue-600' : 'text-gray-500' }}">
-                                            {{ $authorLabel }}
-                                        </span>
-                                        @if($msg['date'])
-                                            <span class="text-xs text-gray-400">
-                                                {{ $msg['date']->translatedFormat('d F Y à H:i') }}
-                                            </span>
-                                        @endif
-                                    </div>
-                                    <div class="rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap
-                                                {{ $isCommercial
-                                                    ? 'bg-blue-600 text-white rounded-br-sm'
-                                                    : 'bg-gray-100 text-gray-800 rounded-bl-sm' }}">
-                                        @if(! empty($msg['content'])){{ $msg['content'] }}@endif
+                                <div class="min-w-0 max-w-[75%] flex flex-col {{ $isCommercial ? 'items-end' : 'items-start' }}">
+                                    @unless($sameAsPrev)
+                                        <div class="flex {{ $isCommercial ? 'flex-row-reverse' : 'flex-row' }} items-baseline gap-2 mb-1">
+                                            <span class="text-xs font-semibold {{ $isCommercial ? 'text-blue-600' : 'text-gray-500' }}">{{ $authorLabel }}</span>
+                                            @if($msg['date'])
+                                                <span class="text-xs text-gray-400">{{ $msg['date']->translatedFormat('d F Y à H:i') }}</span>
+                                            @endif
+                                        </div>
+                                    @endunless
+                                    <div class="chat-bubble w-fit max-w-full rounded-2xl px-4 py-2.5 text-sm
+                                                {{ $isCommercial ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-gray-100 text-gray-800 rounded-bl-sm' }}"
+                                         @if($sameAsPrev && $msg['date']) title="{{ $msg['date']->translatedFormat('d F Y à H:i') }}" @endif>
+                                        @if($text !== '')<p class="whitespace-pre-wrap break-words">{{ $text }}</p>@endif
                                         {{-- Pièce jointe du commentaire --}}
                                         @if($msg['attachment'] ?? null)
                                             @php $att = $msg['attachment']; @endphp
                                             @if($att->isImage())
                                                 <a href="{{ route('support.ticket-attachment', [$ticket->id, $att->id]) }}"
-                                                   target="_blank" class="block {{ !empty($msg['content']) ? 'mt-2' : '' }}">
+                                                   target="_blank" class="block {{ $text !== '' ? 'mt-2' : '' }}">
                                                     <img src="{{ route('support.ticket-attachment', [$ticket->id, $att->id]) }}"
                                                          alt="{{ e($att->original_name) }}"
                                                          class="max-w-[200px] rounded-xl {{ $isCommercial ? 'border border-white/20' : 'border border-gray-200' }}">
                                                 </a>
                                             @else
                                                 <a href="{{ route('support.ticket-attachment', [$ticket->id, $att->id]) }}"
-                                                   class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs {{ !empty($msg['content']) ? 'mt-2' : '' }}
+                                                   class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs {{ $text !== '' ? 'mt-2' : '' }}
                                                           {{ $isCommercial ? 'bg-white/20 text-white' : 'bg-white text-gray-600 border border-gray-200' }}">
                                                     <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                         <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
@@ -363,6 +356,31 @@
                         @endforeach
                     @endif
                 </div>
+
+                {{-- Clôture par le commercial --}}
+                @if($ticket->status === 'created' && $ticket->glpi_ticket_id)
+                    <div x-data="{ ask: false }" class="mx-6 mb-3 flex flex-wrap items-center justify-end gap-2 text-sm">
+                        <button type="button" x-show="!ask" @click="ask = true"
+                                class="px-3 py-1.5 rounded-full text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-medium transition-colors">
+                            ✓ Le problème est résolu
+                        </button>
+                        <form x-show="ask" x-cloak method="POST" action="{{ route('support.ticket-resolve', $ticket->id) }}"
+                              class="flex flex-wrap items-center justify-end gap-2">
+                            @csrf
+                            <span class="text-gray-600">Clôturer ce ticket dans GLPI ?</span>
+                            <button type="submit" class="px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium">Oui, clôturer</button>
+                            <button type="button" @click="ask = false" class="px-3 py-1.5 rounded-full text-gray-600 hover:bg-gray-100">Annuler</button>
+                        </form>
+                    </div>
+                @endif
+                @if(session('ticket_resolved'))
+                    <div class="mx-6 mb-3 px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-lg text-sm text-emerald-700">
+                        Ticket clôturé : le support a été informé que le problème est résolu.
+                    </div>
+                @endif
+                @error('resolve')
+                    <div class="mx-6 mb-3 px-4 py-2 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">{{ $message }}</div>
+                @enderror
 
                 {{-- Flash commentaire ajouté --}}
                 @if(session('comment_added'))
@@ -417,7 +435,8 @@
                                       rows="2"
                                       placeholder="Répondre au support..."
                                       x-model="msg"
-                                      class="flex-1 rounded-2xl border border-gray-200 px-4 py-2.5 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none"></textarea>
+                                      @input="$el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight, 260) + 'px'"
+                                      class="flex-1 max-h-[260px] overflow-y-auto rounded-2xl border border-gray-200 px-4 py-2.5 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none"></textarea>
 
                             {{-- Bouton envoyer --}}
                             <button type="submit"

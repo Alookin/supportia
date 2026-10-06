@@ -15,5 +15,11 @@ Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=5')
     ->everyMinute()
     ->withoutOverlapping();
 
+// Statuts GLPI des tickets ouverts + notification « ticket résolu » au demandeur
+Schedule::command('glpi:sync-ticket-statuses')->everyTenMinutes()->withoutOverlapping();
+
 // Délai de résolution médian par catégorie (estimation affichée au commercial)
 Schedule::command('glpi:sync-resolution-stats')->dailyAt('03:17')->withoutOverlapping();
+
+// Brouillons « à valider » abandonnés (jamais confirmés par le commercial)
+Schedule::command('zeno:prune-drafts')->dailyAt('02:41');

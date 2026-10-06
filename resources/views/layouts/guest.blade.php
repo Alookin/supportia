@@ -13,17 +13,15 @@
         <title>{{ $pageTitle ?? 'Zeno' }}</title>
 
         <!-- Favicon SVG inline -->
-        <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%234F46E5'/><text x='16' y='23' text-anchor='middle' font-family='Arial,sans-serif' font-size='20' font-weight='bold' fill='white'>Z</text></svg>">
+        <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%237C6CF0'/><text x='16' y='23' text-anchor='middle' font-family='Arial,sans-serif' font-size='20' font-weight='bold' fill='white'>Z</text></svg>">
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+        <link href="https://fonts.bunny.net/css?family=ibm-plex-sans:400,500,600,700|space-grotesk:500,600,700|ibm-plex-mono:400,500&display=swap" rel="stylesheet" />
         @if($branded)
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;600&display=swap" rel="stylesheet">
         <style>
             .branded-label {
-                font-family: 'Inter', system-ui, sans-serif;
+                font-family: 'IBM Plex Sans', system-ui, sans-serif;
                 font-weight: 300;
                 letter-spacing: 0.15em;
                 text-transform: uppercase;
@@ -57,6 +55,11 @@
         </style>
         @endif
 
+        <script>
+            // Thème : sombre par défaut, choix mémorisé (avant le rendu pour éviter le flash blanc)
+            try { if ((localStorage.getItem('zeno-theme') || 'dark') === 'dark') document.documentElement.classList.add('dark'); }
+            catch (e) { document.documentElement.classList.add('dark'); }
+        </script>
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>

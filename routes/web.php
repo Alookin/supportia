@@ -11,11 +11,11 @@ Route::get('/dashboard', function () {
     $user = auth()->user();
     $firstName = explode(' ', trim($user->name))[0];
 
-    $weekTickets = \App\Models\SupportTicket::where('user_id', $user->id)
+    $weekTickets = \App\Models\SupportTicket::where('user_id', $user->id)->submitted()
         ->where('created_at', '>=', now()->startOfWeek())
         ->count();
 
-    $lastTicket = \App\Models\SupportTicket::where('user_id', $user->id)
+    $lastTicket = \App\Models\SupportTicket::where('user_id', $user->id)->submitted()
         ->orderByDesc('created_at')
         ->first();
 
@@ -30,6 +30,9 @@ Route::middleware('auth')->group(function () {
 
 require __DIR__.'/auth.php';
 
+// /logout tapé dans la barre d'adresse : pas de page d'erreur (la déconnexion reste en POST)
+Route::get('/logout', fn () => redirect()->route('dashboard'))->middleware('auth');
+
 Route::middleware(['auth', 'org.active'])->prefix('support')->group(function () {
     Route::get('/', function () {
         $user       = auth()->user();
@@ -40,12 +43,15 @@ Route::middleware(['auth', 'org.active'])->prefix('support')->group(function () 
     Route::get('/dashboard', [SupportDashboardController::class, 'index'])->name('support.dashboard');
     Route::get('/mes-tickets', [SupportDashboardController::class, 'myTickets'])->name('support.my-tickets');
     Route::get('/equipe', [SupportDashboardController::class, 'teamTickets'])->name('support.team-tickets');
-    Route::get('/tickets/{id}', [SupportDashboardController::class, 'show'])->name('support.ticket-detail');
+    Route::get('/tickets/{id}', [SupportDashboardController::class, 'show'])->whereNumber('id')->name('support.ticket-detail');
     Route::post('/tickets/{id}/comment', [SupportDashboardController::class, 'addComment'])->name('support.ticket-comment');
+    Route::post('/tickets/{id}/resolve', [SupportDashboardController::class, 'resolve'])->whereNumber('id')->name('support.ticket-resolve');
     Route::get('/tickets/{id}/attachments/{attachmentId}', [SupportDashboardController::class, 'downloadAttachment'])->name('support.ticket-attachment');
     Route::get('/demo', fn() => view('support.demo'))->name('support.demo');
 
+    Route::get('/tickets/open-for-client', [SupportTicketController::class, 'openForClient'])->middleware('throttle:60,1')->name('support.open-for-client');
     Route::get('/tickets', [SupportTicketController::class, 'index']);
     Route::post('/tickets', [SupportTicketController::class, 'store'])->middleware('throttle:20,1');
+    Route::delete('/tickets/{ticket}/draft', [SupportTicketController::class, 'cancelDraft'])->name('support.cancel-draft');
     Route::post('/tickets/{ticket}/confirm', [SupportTicketController::class, 'confirm'])->middleware('throttle:20,1');
 });

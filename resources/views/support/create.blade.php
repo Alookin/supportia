@@ -7,7 +7,8 @@
     </x-slot>
 
 <div class="min-h-screen bg-gray-50 py-8 px-4" x-data="supportForm()" x-cloak>
-    <div class="max-w-lg mx-auto">
+    <div class="max-w-5xl mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-6 lg:items-start">
+    <div class="min-w-0 max-w-lg w-full mx-auto lg:max-w-none">
 
         {{-- Header --}}
         <div class="flex items-center gap-3 mb-6 bg-white rounded-xl p-4 shadow-sm">
@@ -20,11 +21,10 @@
             </div>
             <template x-if="result && result.provider">
                 <span class="ml-auto text-xs px-2 py-1 rounded-md font-semibold"
-                      :class="result.provider === 'claude'
+                      :class="['claude', 'local'].includes(result.provider)
                           ? 'bg-blue-50 text-blue-700'
                           : 'bg-amber-50 text-amber-700'"
-                      x-text="(result.provider === 'claude' ? 'Claude' : 'Fallback')
-                              + ' · ' + latency + 's'">
+                      x-text="['claude', 'local'].includes(result.provider) ? 'Analyse IA' : 'Analyse simplifiée'">
                 </span>
             </template>
         </div>
@@ -45,10 +45,11 @@
 
                     {{-- Champs clients dynamiques --}}
                     <div x-show="isSpecificClient" x-transition>
-                        <template x-for="(client, index) in clients" :key="index">
+                        <template x-for="(client, index) in clients" :key="client.uid">
                             <div class="flex items-center gap-2 mb-2">
                                 <input type="text"
                                        x-model="client.id"
+                                       @input.debounce.600ms="checkDuplicates()"
                                        placeholder="ID client *"
                                        class="w-28 px-3 py-2 border border-gray-200 rounded-lg text-sm
                                               focus:ring-2 focus:ring-blue-500 focus:border-blue-500
@@ -81,6 +82,28 @@
                             Ajouter un autre client
                         </button>
                     </div>
+
+                    {{-- Alerte doublon --}}
+                    <template x-if="isSpecificClient && duplicates.length > 0">
+                        <div class="mt-2 mb-1 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                            <p class="font-semibold text-amber-800 mb-1">Un ticket est déjà ouvert pour ce client</p>
+                            <ul class="space-y-1">
+                                <template x-for="(d, i) in duplicates" :key="i">
+                                    <li class="text-amber-700">
+                                        <template x-if="d.visible">
+                                            <span>Client <span x-text="d.clientId"></span> :
+                                                <a :href="d.url" class="underline font-medium" x-text="d.title"></a>
+                                                (<span x-text="d.age"></span>) — vous pouvez y ajouter un commentaire.</span>
+                                        </template>
+                                        <template x-if="!d.visible">
+                                            <span>Client <span x-text="d.clientId"></span> : un collègue a ouvert un ticket <span x-text="d.age"></span>.</span>
+                                        </template>
+                                    </li>
+                                </template>
+                            </ul>
+                            <p class="text-xs text-amber-700 mt-1">Si c'est un problème différent, continuez normalement.</p>
+                        </div>
+                    </template>
 
                     {{-- Contexte libre si pas de client spécifique --}}
                     <div x-show="!isSpecificClient" x-transition>
@@ -123,6 +146,12 @@
                     </div>
                     <template x-if="descriptionError">
                         <p class="mt-1 text-xs text-red-500" x-text="descriptionError"></p>
+                    </template>
+                    {{-- Indice de catégorie en direct : simple recherche de mots-clés, aucun appel IA --}}
+                    <template x-if="liveCategory">
+                        <p class="mt-2 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700">
+                            Catégorie probable : <strong x-text="liveCategory"></strong>
+                        </p>
                     </template>
                 </div>
 
@@ -263,8 +292,9 @@
                     <select x-model="editResult.category_slug"
                             class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm
                                    focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
-                        <template x-for="cat in categories.filter(c => c.is_visible_to_users)" :key="cat.slug">
-                            <option :value="cat.slug" x-text="cat.label_simple || cat.label"></option>
+                        <template x-for="cat in categories.filter(c => c.is_visible_to_users || c.slug === editResult.category_slug)" :key="cat.slug">
+                            <option :value="cat.slug" :selected="cat.slug === editResult.category_slug"
+                                    x-text="cat.label_simple || cat.label"></option>
                         </template>
                     </select>
                 </div>
@@ -300,7 +330,7 @@
                                    bg-green-600 hover:bg-green-700 active:scale-[0.98] transition-all">
                         Confirmer et créer
                     </button>
-                    <button @click="state = 'form'"
+                    <button @click="cancelDraft()"
                             class="px-4 py-3 rounded-lg font-semibold text-gray-600 text-sm
                                    bg-gray-100 hover:bg-gray-200 transition-colors">
                         Annuler
@@ -380,6 +410,20 @@
         </template>
 
     </div>
+
+    {{-- ═══════════ CONSEILS (colonne de droite) ═══════════ --}}
+    <aside x-show="state === 'form'" class="mt-6 lg:mt-0 max-w-lg w-full mx-auto lg:max-w-none lg:sticky lg:top-6">
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <h3 class="font-bold text-gray-900 mb-3">Pour un bon ticket</h3>
+            <ul class="space-y-3 text-sm text-gray-600">
+                <li class="flex gap-2.5"><span class="zeno-tip-dot">1</span><span><strong class="text-gray-800">L'ID client</strong> : le support retrouve le compte tout de suite.</span></li>
+                <li class="flex gap-2.5"><span class="zeno-tip-dot">2</span><span><strong class="text-gray-800">Ce que voit le client</strong> : message d'erreur, écran, annonce concernée.</span></li>
+                <li class="flex gap-2.5"><span class="zeno-tip-dot">3</span><span><strong class="text-gray-800">Depuis quand</strong> et si d'autres clients sont touchés.</span></li>
+                <li class="flex gap-2.5"><span class="zeno-tip-dot">4</span><span><strong class="text-gray-800">Une capture d'écran</strong> vaut mieux qu'un long texte.</span></li>
+            </ul>
+        </div>
+    </aside>
+    </div>
 </div>
 
 <script>
@@ -391,7 +435,8 @@ function supportForm() {
         // Inputs
         description: '',
         isSpecificClient: true,
-        clients: [{ id: '', name: '' }],
+        clients: [{ uid: 1, id: '', name: '' }],
+        duplicates: [],
         context: '',
         attachments: [],    // [{file, name, size, preview}]
         error: null,
@@ -418,12 +463,40 @@ function supportForm() {
         },
 
         // ─── Gestion des clients ─────────────────────────────────
+        // ─── Doublons : tickets encore ouverts pour ces clients ──
+        async checkDuplicates() {
+            const ids = [...new Set(this.clients.map(c => c.id.trim()).filter(Boolean))];
+            const found = [];
+            for (const id of ids) {
+                try {
+                    const resp = await fetch(`/support/tickets/open-for-client?client_id=${encodeURIComponent(id)}`, { headers: { 'Accept': 'application/json' } });
+                    if (!resp.ok) continue;
+                    const data = await resp.json();
+                    data.tickets.forEach(t => found.push({ ...t, clientId: id }));
+                } catch (e) { /* non bloquant */ }
+            }
+            this.duplicates = found;
+        },
+
         addClient() {
-            if (this.clients.length < 10) this.clients.push({ id: '', name: '' });
+            if (this.clients.length < 10) this.clients.push({ uid: Date.now(), id: '', name: '' });
         },
 
         removeClient(index) {
             this.clients.splice(index, 1);
+        },
+
+        // Indice de catégorie pendant la saisie (mêmes mots-clés que l'analyse de secours, côté navigateur)
+        get liveCategory() {
+            const text = this.description.toLowerCase();
+            if (text.trim().length < 20) return null;
+            let best = null, bestScore = 0;
+            for (const cat of this.categories) {
+                if (!cat.is_visible_to_users) continue;
+                const score = (cat.keywords || []).filter(k => k && text.includes(String(k).toLowerCase())).length;
+                if (score > bestScore) { best = cat; bestScore = score; }
+            }
+            return best ? (best.label_simple || best.label) : null;
         },
 
         get descriptionStatus() {
@@ -575,6 +648,20 @@ function supportForm() {
         },
 
 
+        // Annuler l'écran de validation : le brouillon est supprimé, la saisie est conservée
+        async cancelDraft() {
+            const ticketId = this.result?.ticket_id;
+            this.state = 'form';
+            if (!ticketId) return;
+            try {
+                await fetch(`/support/tickets/${ticketId}/draft`, {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content },
+                });
+            } catch (e) { /* purgé automatiquement sous 24 h sinon */ }
+            this.result = null;
+        },
+
         async confirmEdited() {
             this.state = 'loading';
             const ticketId = this.result?.ticket_id || this.editResult?.ticket_id;
@@ -621,7 +708,8 @@ function supportForm() {
             this.state = 'form';
             this.description = '';
             this.isSpecificClient = true;
-            this.clients = [{ id: '', name: '' }];
+            this.clients = [{ uid: Date.now(), id: '', name: '' }];
+            this.duplicates = [];
             this.context = '';
             this.attachments = [];
             this.error = null;
@@ -650,7 +738,7 @@ function supportForm() {
         },
 
         priorityLabel(p) {
-            return { 1: 'Très basse', 2: 'Basse', 3: 'Moyenne', 4: 'Haute', 5: 'Très haute' }[p] || 'Moyenne';
+            return { 1: 'Très basse', 2: 'Basse', 3: 'Normale', 4: 'Haute', 5: 'Critique' }[p] || 'Normale';
         },
 
         priorityEmoji(p) {

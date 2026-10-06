@@ -59,7 +59,7 @@ class Organization extends Model
      * Retourne la clé Claude à utiliser :
      * celle de l'orga si définie, sinon la clé globale .env.
      */
-    public function getClaudeApiKey(): string
+    public function getClaudeApiKey(): ?string
     {
         return $this->claude_api_key ?: config('supportia.claude_api_key');
     }

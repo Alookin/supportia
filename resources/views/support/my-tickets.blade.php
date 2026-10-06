@@ -68,15 +68,7 @@
                             // en_cours  : statut GLPI 1-3 (actif), ou créé sans info GLPI
                             // resolu    : statut GLPI 5-6, ou status local resolved/closed
                             // attente   : statut GLPI 4, ou status local pending/queued
-                            $glpiFilterGroup = fn($t) => match(true) {
-                                in_array((int)$t->glpi_status, [5, 6], true)         => 'resolu',
-                                in_array($t->status, ['resolved', 'closed'], true)   => 'resolu',
-                                (int)$t->glpi_status === 4                            => 'attente',
-                                in_array($t->status, ['pending', 'queued', 'needs_review'], true)    => 'attente',
-                                in_array((int)$t->glpi_status, [1, 2, 3], true)      => 'en_cours',
-                                $t->status === 'created'                              => 'en_cours',
-                                default                                               => 'other',
-                            };
+                            $glpiFilterGroup = fn($t) => $t->statusBadge()['group'];
 
                             $filterTabs = [
                                 'all'      => ['label' => 'Tous',       'count' => $tickets->count()],
@@ -113,7 +105,7 @@
                         <svg class="w-10 h-10 text-gray-200 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                         </svg>
-                        <p class="text-sm text-gray-400 mb-4">Vous n'avez pas encore créé de ticket.</p>
+                        <p class="text-sm text-gray-400 mb-4">{{ $teamView ? "Aucun ticket pour l'instant dans votre périmètre." : "Vous n'avez pas encore créé de ticket." }}</p>
                         <a href="{{ route('support.create') }}"
                            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors">
                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
@@ -129,14 +121,14 @@
                                 <tr>
                                     <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Date</th>
                                     @if($teamView)
-                                        <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Auteur</th>
+                                        <th class="hidden md:table-cell px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Auteur</th>
                                     @endif
-                                    <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Client</th>
+                                    <th class="hidden md:table-cell px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Client</th>
                                     <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Titre</th>
-                                    <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Catégorie</th>
-                                    <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Priorité</th>
+                                    <th class="hidden md:table-cell px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Catégorie</th>
+                                    <th class="hidden md:table-cell px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Priorité</th>
                                     <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Statut</th>
-                                    <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Mise à jour</th>
+                                    <th class="hidden md:table-cell px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Mise à jour</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-50">
@@ -155,32 +147,10 @@
 
                                         // Badge statut : priorité au statut GLPI synchronisé
                                         $glpiStatusInt = $ticket->glpi_status ? (int) $ticket->glpi_status : 0;
-                                        $statusConfig = match(true) {
-                                            $glpiStatusInt === 1 => ['label' => 'Nouveau',           'class' => 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',        'dot' => 'bg-gray-400'],
-                                            $glpiStatusInt === 2 => ['label' => 'En cours (assigné)', 'class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',         'dot' => 'bg-blue-500'],
-                                            $glpiStatusInt === 3 => ['label' => 'En cours (planifié)','class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',         'dot' => 'bg-blue-500'],
-                                            $glpiStatusInt === 4 => ['label' => 'En attente',         'class' => 'bg-orange-50 text-orange-700 ring-1 ring-orange-200',   'dot' => 'bg-orange-400'],
-                                            $glpiStatusInt === 5 => ['label' => 'Résolu',             'class' => 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200','dot' => 'bg-emerald-500'],
-                                            $glpiStatusInt === 6 => ['label' => 'Fermé',              'class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-300',        'dot' => 'bg-gray-500'],
-                                            in_array($ticket->status, ['resolved','closed'], true) => ['label' => 'Résolu', 'class' => 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
-                                            $ticket->status === 'created' => ['label' => 'Dans GLPI',  'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200','dot' => 'bg-emerald-500'],
-                                            $ticket->status === 'pending' => ['label' => 'En attente', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
-                                            $ticket->status === 'needs_review' => ['label' => 'À valider', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
-                                            $ticket->status === 'queued'  => ['label' => 'En file',    'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',         'dot' => 'bg-blue-400'],
-                                            $ticket->status === 'failed'  => ['label' => 'Échec',      'class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',            'dot' => 'bg-red-500'],
-                                            default                       => ['label' => $ticket->status ?? '—', 'class' => 'bg-gray-100 text-gray-500', 'dot' => 'bg-gray-300'],
-                                        };
+                                        $statusConfig = $ticket->statusBadge();
 
                                         // Groupe pour x-show Alpine (même logique que les onglets)
-                                        $filterGroup = match(true) {
-                                            in_array($glpiStatusInt, [5, 6], true)                    => 'resolu',
-                                            in_array($ticket->status, ['resolved','closed'], true)    => 'resolu',
-                                            $glpiStatusInt === 4                                       => 'attente',
-                                            in_array($ticket->status, ['pending','queued','needs_review'], true)     => 'attente',
-                                            in_array($glpiStatusInt, [1, 2, 3], true)                 => 'en_cours',
-                                            $ticket->status === 'created'                              => 'en_cours',
-                                            default                                                    => 'other',
-                                        };
+                                        $filterGroup = $statusConfig['group'];
                                     @endphp
                                     <tr class="hover:bg-indigo-50/40 transition-colors cursor-pointer"
                                         x-show="filter === 'all' || filter === '{{ $filterGroup }}'"
@@ -192,12 +162,12 @@
                                         </td>
 
                                         @if($teamView)
-                                            <td class="px-4 py-3 whitespace-nowrap text-gray-700 text-sm">
+                                            <td class="hidden md:table-cell px-4 py-3 whitespace-nowrap text-gray-700 text-sm">
                                                 {{ $ticket->user?->name ?? '—' }}
                                             </td>
                                         @endif
 
-                                        <td class="px-4 py-3 whitespace-nowrap max-w-[130px] truncate text-gray-700 text-sm" title="{{ $ticket->client_name }}">
+                                        <td class="hidden md:table-cell px-4 py-3 whitespace-nowrap max-w-[130px] truncate text-gray-700 text-sm" title="{{ $ticket->client_name }}">
                                             {{ $ticket->client_name ?: '—' }}
                                         </td>
 
@@ -207,11 +177,11 @@
                                             </span>
                                         </td>
 
-                                        <td class="px-4 py-3 whitespace-nowrap max-w-[160px] truncate text-gray-500 text-xs" title="{{ $categoryLabel }}">
+                                        <td class="hidden md:table-cell px-4 py-3 whitespace-nowrap max-w-[160px] truncate text-gray-500 text-xs" title="{{ $categoryLabel }}">
                                             {{ $categoryLabel }}
                                         </td>
 
-                                        <td class="px-4 py-3 whitespace-nowrap">
+                                        <td class="hidden md:table-cell px-4 py-3 whitespace-nowrap">
                                             @if($ticket->ai_priority)
                                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $priorityConfig['class'] }}">
                                                     {{ $priorityConfig['label'] }}
@@ -228,7 +198,7 @@
                                             </span>
                                         </td>
 
-                                        <td class="px-4 py-3 whitespace-nowrap">
+                                        <td class="hidden md:table-cell px-4 py-3 whitespace-nowrap">
                                             <span class="text-gray-400 text-xs">
                                                 {{ $ticket->updated_at->setTimezone('Europe/Paris')->format('d/m/Y H:i') }}
                                             </span>

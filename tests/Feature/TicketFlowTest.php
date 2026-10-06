@@ -214,4 +214,52 @@ class TicketFlowTest extends TestCase
         $this->assertSame(5, SyncResolutionStatsCommand::median([1, 5, 9]));
         $this->assertSame(4, SyncResolutionStatsCommand::median([1, 3, 5, 9]));
     }
+
+    public function test_dry_run_never_writes_to_glpi(): void
+    {
+        config(['supportia.glpi_dry_run' => true]);
+        Http::fake(['api.anthropic.com/*' => Http::response($this->claude(0.92)), '*' => Http::response([], 500)]);
+
+        $this->submit(['attachments' => [UploadedFile::fake()->createWithContent('erreur.log', 'x')]])
+            ->assertOk()->assertJsonPath('status', 'created');
+
+        $this->assertGreaterThanOrEqual(900000, (int) SupportTicket::firstOrFail()->glpi_ticket_id);
+        Http::assertNotSent(fn (HttpRequest $r) => str_contains($r->url(), 'glpi.test'));
+
+        $this->actingAs($this->user)->get('/support')->assertSee('Mode test');
+    }
+
+    public function test_local_ai_provider_is_used_when_configured(): void
+    {
+        config([
+            'supportia.ai_provider'       => 'local',
+            'supportia.local_ai.base_url' => 'http://127.0.0.1:11434/v1',
+            'supportia.local_ai.model'    => 'qwen2.5:7b',
+            'supportia.glpi_dry_run'      => true,
+        ]);
+        $json = json_encode(['category_slug' => 'tech_flux_bug_import', 'priority' => 3, 'title' => 'Import bloqué', 'body' => 'Corps', 'confidence' => 0.9]);
+        Http::fake([
+            '127.0.0.1:11434/*' => Http::response([
+                'choices' => [['message' => ['content' => "```json\n{$json}\n```"]]],
+                'usage'   => ['prompt_tokens' => 800, 'completion_tokens' => 90],
+            ]),
+        ]);
+
+        $this->submit()->assertOk()->assertJsonPath('status', 'created');
+
+        $this->assertSame('local', SupportTicket::firstOrFail()->ai_provider);
+        $log = AiRequestLog::firstOrFail();
+        $this->assertSame('qwen2.5:7b', $log->model);
+        $this->assertSame(800, $log->prompt_tokens);
+        Http::assertSent(fn (HttpRequest $r) => $r->url() === 'http://127.0.0.1:11434/v1/chat/completions' && $r['model'] === 'qwen2.5:7b');
+    }
+
+    public function test_forbidden_page_is_in_french(): void
+    {
+        $other  = User::factory()->create(['organization_id' => $this->org->id]);
+        $ticket = SupportTicket::create(['organization_id' => $this->org->id, 'user_id' => $other->id, 'raw_description' => 'x', 'status' => 'created']);
+
+        $this->actingAs($this->user)->get("/support/tickets/{$ticket->id}")
+            ->assertForbidden()->assertSee('Accès refusé')->assertSee("Retour à l'accueil", false);
+    }
 }

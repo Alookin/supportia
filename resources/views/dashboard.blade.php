@@ -9,12 +9,12 @@
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-8">
 
             {{-- ── Bienvenue ───────────────────────────────────────── --}}
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-8 py-7 flex items-center gap-5">
+            <div class="zeno-hero bg-white rounded-2xl shadow-sm border border-gray-100 px-8 py-9 flex items-center gap-5">
                 <div class="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-bold text-2xl shrink-0">
                     {{ mb_strtoupper(mb_substr($firstName, 0, 1)) }}
                 </div>
                 <div>
-                    <h1 class="text-2xl font-bold text-gray-900">Bonjour {{ $firstName }} 👋</h1>
+                    <h1 class="text-3xl font-bold text-gray-900">Bonjour {{ $firstName }} 👋</h1>
                     <p class="mt-0.5 text-sm text-gray-500">Que souhaitez-vous faire aujourd'hui ?</p>
                 </div>
             </div>
@@ -66,8 +66,8 @@
                 {{-- Suivi global --}}
                 <a href="{{ route('support.dashboard') }}"
                    class="group bg-white hover:bg-gray-50 rounded-2xl shadow-sm border border-gray-100 p-7 flex flex-col gap-4 transition-colors">
-                    <div class="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center">
-                        <svg class="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                    <div class="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
                         </svg>
                     </div>
@@ -75,7 +75,7 @@
                         <p class="font-bold text-gray-900 text-lg leading-snug">Suivi global</p>
                         <p class="mt-1 text-sm text-gray-500">Vue d'ensemble de l'activité support</p>
                     </div>
-                    <div class="mt-auto flex items-center gap-1 text-emerald-600 text-sm font-medium group-hover:gap-2 transition-all">
+                    <div class="mt-auto flex items-center gap-1 text-indigo-600 text-sm font-medium group-hover:gap-2 transition-all">
                         Voir le dashboard
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
@@ -114,14 +114,7 @@
 
                         @if($lastTicket)
                             @php
-                                $statusConfig = match($lastTicket->status) {
-                                    'created' => ['label' => 'Créé',       'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
-                                    'pending' => ['label' => 'En attente', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
-                                    'needs_review' => ['label' => 'À valider', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
-                                    'queued'  => ['label' => 'En file',    'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',         'dot' => 'bg-blue-400'],
-                                    'failed'  => ['label' => 'Échec',      'class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',            'dot' => 'bg-red-500'],
-                                    default   => ['label' => '—',          'class' => 'bg-gray-100 text-gray-500',                             'dot' => 'bg-gray-300'],
-                                };
+                                $statusConfig = $lastTicket->statusBadge();
                             @endphp
                             <div class="flex items-start justify-between gap-4">
                                 <div class="min-w-0">
