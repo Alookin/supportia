@@ -9,12 +9,12 @@
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-8">
 
             {{-- ── Bienvenue ───────────────────────────────────────── --}}
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-8 py-7 flex items-center gap-5">
+            <div class="zeno-hero bg-white rounded-2xl shadow-sm border border-gray-100 px-8 py-9 flex items-center gap-5">
                 <div class="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-bold text-2xl shrink-0">
                     {{ mb_strtoupper(mb_substr($firstName, 0, 1)) }}
                 </div>
                 <div>
-                    <h1 class="text-2xl font-bold text-gray-900">Bonjour {{ $firstName }} 👋</h1>
+                    <h1 class="text-3xl font-bold text-gray-900">Bonjour {{ $firstName }} 👋</h1>
                     <p class="mt-0.5 text-sm text-gray-500">Que souhaitez-vous faire aujourd'hui ?</p>
                 </div>
             </div>

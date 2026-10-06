@@ -9,14 +9,17 @@
                         <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm leading-none">
                             Z
                         </div>
-                        <span class="font-bold text-white text-base">Zeno</span>
+                        <span class="font-display font-bold text-white text-base">Zeno</span>
                     </a>
+                    @if(\App\Services\GlpiClientService::dryRun())
+                        <span class="zeno-testpill ms-3" title="Mode test : aucun ticket n'est envoyé à GLPI (numéros fictifs à partir de 900000).">Mode test</span>
+                    @endif
                 </div>
 
                 <!-- Navigation Links -->
-                <div class="hidden space-x-6 sm:-my-px sm:ms-10 sm:flex sm:items-center">
+                <div class="hidden gap-1 sm:-my-px sm:ms-8 sm:flex sm:items-center">
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                        {{ __('Dashboard') }}
+                        Accueil
                     </x-nav-link>
                     <x-nav-link :href="route('support.my-tickets')" :active="request()->routeIs('support.my-tickets')">
                         Mes tickets
@@ -30,7 +33,7 @@
                         </x-nav-link>
                     @endif
                     <a href="{{ route('support.create') }}"
-                       class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm">
+                       class="ms-3 whitespace-nowrap inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                         </svg>
@@ -99,7 +102,7 @@
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="pt-2 pb-3 space-y-1">
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                {{ __('Dashboard') }}
+                Accueil
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('support.my-tickets')" :active="request()->routeIs('support.my-tickets')">
                 Mes tickets

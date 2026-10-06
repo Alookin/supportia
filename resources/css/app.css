@@ -10,7 +10,7 @@
    retoucher chaque vue, on assombrit ici les gris Tailwind les plus utilisés.
    Supprimer ce bloc = retour au rendu d'origine.
    ───────────────────────────────────────────────────────────────────────────── */
-.zeno-page { background-color: #e6ebf2; }
+.zeno-page { background-color: #F3F1EC; }   /* fond clair chaud (maquette) */
 
 .text-gray-400 { color: #64748b; }   /* était #9ca3af */
 .text-gray-500 { color: #475569; }   /* était #6b7280 */
@@ -38,44 +38,44 @@ input[type="text"], input[type="email"], input[type="password"], textarea, selec
    Palette : fond #0b1220, cartes #151e2e, surfaces #1c2738, bordures #2a3a52.
    ───────────────────────────────────────────────────────────────────────────── */
 html.dark { color-scheme: dark; }
-html.dark body, html.dark .zeno-page, html.dark .min-h-screen { background-color: #0b1220; color: #dbe3ee; }
-html.dark nav.bg-slate-900 { background-color: #070d18; border-color: #1c2738; }
+html.dark body, html.dark .zeno-page, html.dark .min-h-screen { background-color: #0A0C10; color: #E7EAF0; }
+html.dark nav.bg-slate-900 { background-color: #0E1116; border-color: #181C23; }
 
 /* Surfaces */
-html.dark .bg-white            { background-color: #151e2e; }
-html.dark .bg-gray-50          { background-color: #111a29; }
-html.dark .bg-gray-100         { background-color: #1c2738; }
-html.dark .bg-gray-200         { background-color: #26344a; }
-html.dark .bg-gray-300         { background-color: #34455f; }
+html.dark .bg-white            { background-color: #13161C; }
+html.dark .bg-gray-50          { background-color: #0E1116; }
+html.dark .bg-gray-100         { background-color: #181C23; }
+html.dark .bg-gray-200         { background-color: #272C35; }
+html.dark .bg-gray-300         { background-color: #343A44; }
 html.dark .bg-white\/20        { background-color: rgba(255,255,255,.08); }
-html.dark .hover\:bg-gray-50:hover, html.dark .hover\:bg-white\/60:hover { background-color: #1c2738; }
-html.dark .hover\:bg-gray-100:hover { background-color: #233147; }
-html.dark .hover\:bg-gray-200:hover { background-color: #2b3b54; }
+html.dark .hover\:bg-gray-50:hover, html.dark .hover\:bg-white\/60:hover { background-color: #181C23; }
+html.dark .hover\:bg-gray-100:hover { background-color: #272C35; }
+html.dark .hover\:bg-gray-200:hover { background-color: #2A2F38; }
 html.dark .hover\:bg-blue-50:hover, html.dark .hover\:bg-blue-50\/30:hover,
-html.dark .hover\:bg-indigo-50\/40:hover, html.dark .hover\:bg-indigo-100:hover { background-color: rgba(99,102,241,.14); }
-html.dark header.bg-white      { background-color: #111a29; border-bottom: 1px solid #1c2738; }
+html.dark .hover\:bg-indigo-50\/40:hover, html.dark .hover\:bg-indigo-100:hover { background-color: rgba(124,108,240,.14); }
+html.dark header.bg-white      { background-color: #0E1116; border-bottom: 1px solid #181C23; }
 
 /* Textes */
-html.dark .text-gray-900 { color: #f1f5f9; }
-html.dark .text-gray-800 { color: #e2e8f0; }
-html.dark .text-gray-700 { color: #cfd8e3; }
-html.dark .text-gray-600 { color: #b3bfcf; }
-html.dark .text-gray-500 { color: #94a3b8; }
-html.dark .text-gray-400 { color: #7d8ca3; }
-html.dark .text-gray-300, html.dark .text-gray-200 { color: #8494ab; }   /* ≥ 4,5:1 sur les cartes */
-html.dark .hover\:text-gray-900:hover, html.dark .hover\:text-gray-700:hover, html.dark .hover\:text-gray-600:hover { color: #f1f5f9; }
+html.dark .text-gray-900 { color: #E7EAF0; }
+html.dark .text-gray-800 { color: #E7EAF0; }
+html.dark .text-gray-700 { color: #C9CED8; }
+html.dark .text-gray-600 { color: #B0B6C2; }
+html.dark .text-gray-500 { color: #99A0AD; }
+html.dark .text-gray-400 { color: #7D8593; }
+html.dark .text-gray-300, html.dark .text-gray-200 { color: #7D8593; }   /* ≥ 4,5:1 sur les cartes */
+html.dark .hover\:text-gray-900:hover, html.dark .hover\:text-gray-700:hover, html.dark .hover\:text-gray-600:hover { color: #E7EAF0; }
 
 /* Bordures, séparateurs, anneaux */
-html.dark .border-gray-100, html.dark .border-gray-200 { border-color: #233147; }
-html.dark .border-gray-300, html.dark .hover\:border-gray-300:hover { border-color: #34455f; }
+html.dark .border-gray-100, html.dark .border-gray-200 { border-color: #272C35; }
+html.dark .border-gray-300, html.dark .hover\:border-gray-300:hover { border-color: #343A44; }
 html.dark .divide-gray-50 > :not([hidden]) ~ :not([hidden]),
-html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #1f2b3e; }
-html.dark .ring-gray-200, html.dark .ring-gray-300 { --tw-ring-color: #34455f; }
+html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #20242C; }
+html.dark .ring-gray-200, html.dark .ring-gray-300 { --tw-ring-color: #343A44; }
 html.dark .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,.4); }
 
 /* Pastilles colorées : fonds translucides + textes éclaircis */
-html.dark .bg-blue-50,    html.dark .bg-blue-100,    html.dark .bg-blue-50\/30 { background-color: rgba(59,130,246,.14); }
-html.dark .bg-indigo-50,  html.dark .bg-indigo-200  { background-color: rgba(99,102,241,.16); }
+html.dark .bg-blue-50,    html.dark .bg-blue-100,    html.dark .bg-blue-50\/30 { background-color: rgba(124,108,240,.14); }
+html.dark .bg-indigo-50,  html.dark .bg-indigo-200  { background-color: rgba(124,108,240,.16); }
 html.dark .bg-violet-50,  html.dark .bg-purple-100  { background-color: rgba(139,92,246,.16); }
 html.dark .bg-emerald-50, html.dark .bg-emerald-100, html.dark .bg-green-100 { background-color: rgba(16,185,129,.14); }
 html.dark .bg-yellow-50,  html.dark .bg-yellow-100  { background-color: rgba(234,179,8,.14); }
@@ -83,22 +83,22 @@ html.dark .bg-amber-50,   html.dark .bg-amber-100   { background-color: rgba(245
 html.dark .bg-orange-50,  html.dark .bg-orange-100  { background-color: rgba(249,115,22,.14); }
 html.dark .bg-red-50,     html.dark .bg-red-100     { background-color: rgba(239,68,68,.14); }
 
-html.dark .text-blue-600, html.dark .text-blue-700, html.dark .text-blue-800, html.dark .hover\:text-blue-800:hover, html.dark .hover\:text-blue-600:hover { color: #93c5fd; }
-html.dark .text-indigo-600, html.dark .text-indigo-700 { color: #a5b4fc; }
-html.dark .text-violet-500, html.dark .text-violet-600, html.dark .text-purple-700 { color: #c4b5fd; }
-html.dark .text-emerald-600, html.dark .text-emerald-700, html.dark .text-green-600, html.dark .text-green-700 { color: #6ee7b7; }
+html.dark .text-blue-600, html.dark .text-blue-700, html.dark .text-blue-800, html.dark .hover\:text-blue-800:hover, html.dark .hover\:text-blue-600:hover { color: #9A8CF7; }
+html.dark .text-indigo-600, html.dark .text-indigo-700 { color: #9A8CF7; }
+html.dark .text-violet-500, html.dark .text-violet-600, html.dark .text-purple-700 { color: #B4A9FA; }
+html.dark .text-emerald-600, html.dark .text-emerald-700, html.dark .text-green-600, html.dark .text-green-700 { color: #34D399; }
 html.dark .text-yellow-600, html.dark .text-yellow-700 { color: #fde047; }
 html.dark .text-amber-600, html.dark .text-amber-700, html.dark .text-amber-800, html.dark .text-amber-900 { color: #fcd34d; }
 html.dark .text-orange-700 { color: #fdba74; }
-html.dark .text-red-500, html.dark .text-red-600, html.dark .text-red-700 { color: #fca5a5; }
+html.dark .text-red-500, html.dark .text-red-600, html.dark .text-red-700 { color: #F87171; }
 
-html.dark .ring-blue-200    { --tw-ring-color: rgba(59,130,246,.35); }
+html.dark .ring-blue-200    { --tw-ring-color: rgba(124,108,240,.35); }
 html.dark .ring-emerald-200 { --tw-ring-color: rgba(16,185,129,.35); }
 html.dark .ring-yellow-200  { --tw-ring-color: rgba(234,179,8,.35); }
 html.dark .ring-amber-200   { --tw-ring-color: rgba(245,158,11,.35); }
 html.dark .ring-orange-200  { --tw-ring-color: rgba(249,115,22,.35); }
 html.dark .ring-red-200     { --tw-ring-color: rgba(239,68,68,.35); }
-html.dark .border-blue-100, html.dark .border-blue-300  { border-color: rgba(59,130,246,.35); }
+html.dark .border-blue-100, html.dark .border-blue-300  { border-color: rgba(124,108,240,.35); }
 html.dark .border-emerald-100 { border-color: rgba(16,185,129,.3); }
 html.dark .border-amber-100, html.dark .border-amber-200, html.dark .border-amber-300 { border-color: rgba(245,158,11,.35); }
 html.dark .border-red-100 { border-color: rgba(239,68,68,.3); }
@@ -106,10 +106,56 @@ html.dark .border-red-100 { border-color: rgba(239,68,68,.3); }
 /* Formulaires */
 html.dark input[type="text"], html.dark input[type="email"], html.dark input[type="password"],
 html.dark input[type="number"], html.dark input[type="search"], html.dark textarea, html.dark select {
-    background-color: #0e1726; color: #e2e8f0; border-color: #34455f;
+    background-color: #0E1116; color: #E7EAF0; border-color: #343A44;
 }
-html.dark ::placeholder { color: #7d8ca3; }
-html.dark input[type="checkbox"] { background-color: #0e1726; border-color: #46597a; }
+html.dark ::placeholder { color: #7D8593; }
+html.dark input[type="checkbox"] { background-color: #0E1116; border-color: #4A515D; }
 
 /* Bandeau mode test */
 html.dark .bg-amber-100.border-amber-300 { background-color: #3a2a06; color: #fde68a; border-color: #5c4510; }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Couche « Design Zeno » (06/10/2026) — maquette Claude Design
+   Marque violette, polices Space Grotesk (titres) / IBM Plex Sans (texte),
+   navigation en pilules, pastille « Mode test ». Valable en clair et en sombre.
+   ───────────────────────────────────────────────────────────────────────────── */
+:root { --brand: #5B4BD4; --brand-hover: #4A3BC0; --brand-soft: rgba(91,75,212,.10); }
+html.dark { --brand: #7C6CF0; --brand-hover: #5B4BD4; --brand-soft: rgba(124,108,240,.16); }
+
+h1, h2, h3, .font-display { font-family: 'Space Grotesk', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif; letter-spacing: -.01em; }
+
+/* Bleu / indigo d'origine → violet de marque */
+.bg-blue-600, .bg-indigo-600 { background-color: var(--brand); }
+.hover\:bg-blue-700:hover, .hover\:bg-indigo-700:hover { background-color: var(--brand-hover); }
+.text-blue-600, .text-indigo-600, .text-indigo-500 { color: var(--brand); }
+html.dark .text-indigo-500 { color: #9A8CF7; }
+.text-blue-100 { color: rgba(255,255,255,.82); }
+.focus\:ring-blue-500:focus { --tw-ring-color: var(--brand); }
+.focus\:border-blue-500:focus, .border-blue-400 { border-color: var(--brand); }
+input[type="checkbox"].text-blue-600 { color: var(--brand); }
+.bg-blue-50, .bg-indigo-50 { background-color: var(--brand-soft); }
+.text-blue-700, .text-indigo-700 { color: var(--brand-hover); }
+html.dark .text-blue-700, html.dark .text-indigo-700 { color: #9A8CF7; }
+
+/* Navigation */
+html.dark nav.bg-slate-900 { background-color: #0E1116; border-color: #272C35; }
+.zeno-nav-pill { display: inline-flex; align-items: center; white-space: nowrap; padding: .4rem .8rem; border-radius: 9999px;
+                 font-size: .875rem; font-weight: 500; color: #cbd5e1; transition: background-color .15s, color .15s; }
+.zeno-nav-pill:hover { color: #fff; background-color: rgba(255,255,255,.06); }
+.zeno-nav-pill[aria-current="page"] { color: #fff; background-color: rgba(124,108,240,.22); box-shadow: inset 0 0 0 1px rgba(154,140,247,.35); }
+
+.zeno-testpill { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; padding: .15rem .55rem; border-radius: 9999px;
+                 font-size: .7rem; font-weight: 600; letter-spacing: .02em; color: #F5A524; background: rgba(245,165,36,.12);
+                 box-shadow: inset 0 0 0 1px rgba(245,165,36,.35); cursor: help; }
+.zeno-testpill::before { content: ''; width: .4rem; height: .4rem; border-radius: 9999px; background: #F5A524; }
+
+/* Accueil : carte de bienvenue façon « hero » */
+.zeno-hero { background-image: radial-gradient(120% 140% at 0% 0%, rgba(124,108,240,.16) 0%, transparent 55%); }
+html.dark .zeno-hero { background-image: radial-gradient(120% 140% at 0% 0%, rgba(124,108,240,.22) 0%, transparent 55%); }
+
+/* Formulaire : carte de conseils */
+.zeno-tip-dot { width: 1.25rem; height: 1.25rem; border-radius: 9999px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+                font-size: .7rem; font-weight: 700; color: var(--brand); background: var(--brand-soft); }
+
+/* Chiffres des cartes statistiques */
+.tabular-nums, .zeno-stat { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }

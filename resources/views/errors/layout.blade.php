@@ -8,6 +8,8 @@
         try { if ((localStorage.getItem('zeno-theme') || 'dark') === 'dark') document.documentElement.classList.add('dark'); }
         catch (e) { document.documentElement.classList.add('dark'); }
     </script>
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link href="https://fonts.bunny.net/css?family=ibm-plex-sans:400,500,600,700|space-grotesk:500,600,700|ibm-plex-mono:400,500&display=swap" rel="stylesheet" />
     @vite(['resources/css/app.css'])
 </head>
 <body class="font-sans antialiased zeno-page min-h-screen flex items-center justify-center p-6">

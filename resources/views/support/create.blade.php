@@ -7,7 +7,8 @@
     </x-slot>
 
 <div class="min-h-screen bg-gray-50 py-8 px-4" x-data="supportForm()" x-cloak>
-    <div class="max-w-lg mx-auto">
+    <div class="max-w-5xl mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-6 lg:items-start">
+    <div class="min-w-0 max-w-lg w-full mx-auto lg:max-w-none">
 
         {{-- Header --}}
         <div class="flex items-center gap-3 mb-6 bg-white rounded-xl p-4 shadow-sm">
@@ -145,6 +146,12 @@
                     </div>
                     <template x-if="descriptionError">
                         <p class="mt-1 text-xs text-red-500" x-text="descriptionError"></p>
+                    </template>
+                    {{-- Indice de catégorie en direct : simple recherche de mots-clés, aucun appel IA --}}
+                    <template x-if="liveCategory">
+                        <p class="mt-2 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700">
+                            Catégorie probable : <strong x-text="liveCategory"></strong>
+                        </p>
                     </template>
                 </div>
 
@@ -403,6 +410,20 @@
         </template>
 
     </div>
+
+    {{-- ═══════════ CONSEILS (colonne de droite) ═══════════ --}}
+    <aside x-show="state === 'form'" class="mt-6 lg:mt-0 max-w-lg w-full mx-auto lg:max-w-none lg:sticky lg:top-6">
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <h3 class="font-bold text-gray-900 mb-3">Pour un bon ticket</h3>
+            <ul class="space-y-3 text-sm text-gray-600">
+                <li class="flex gap-2.5"><span class="zeno-tip-dot">1</span><span><strong class="text-gray-800">L'ID client</strong> : le support retrouve le compte tout de suite.</span></li>
+                <li class="flex gap-2.5"><span class="zeno-tip-dot">2</span><span><strong class="text-gray-800">Ce que voit le client</strong> : message d'erreur, écran, annonce concernée.</span></li>
+                <li class="flex gap-2.5"><span class="zeno-tip-dot">3</span><span><strong class="text-gray-800">Depuis quand</strong> et si d'autres clients sont touchés.</span></li>
+                <li class="flex gap-2.5"><span class="zeno-tip-dot">4</span><span><strong class="text-gray-800">Une capture d'écran</strong> vaut mieux qu'un long texte.</span></li>
+            </ul>
+        </div>
+    </aside>
+    </div>
 </div>
 
 <script>
@@ -463,6 +484,19 @@ function supportForm() {
 
         removeClient(index) {
             this.clients.splice(index, 1);
+        },
+
+        // Indice de catégorie pendant la saisie (mêmes mots-clés que l'analyse de secours, côté navigateur)
+        get liveCategory() {
+            const text = this.description.toLowerCase();
+            if (text.trim().length < 20) return null;
+            let best = null, bestScore = 0;
+            for (const cat of this.categories) {
+                if (!cat.is_visible_to_users) continue;
+                const score = (cat.keywords || []).filter(k => k && text.includes(String(k).toLowerCase())).length;
+                if (score > bestScore) { best = cat; bestScore = score; }
+            }
+            return best ? (best.label_simple || best.label) : null;
         },
 
         get descriptionStatus() {
