@@ -23,8 +23,7 @@
                       :class="['claude', 'local'].includes(result.provider)
                           ? 'bg-blue-50 text-blue-700'
                           : 'bg-amber-50 text-amber-700'"
-                      x-text="(result.provider === 'claude' ? 'Claude' : (result.provider === 'local' ? 'IA locale' : 'Fallback'))
-                              + ' · ' + latency + 's'">
+                      x-text="['claude', 'local'].includes(result.provider) ? 'Analyse IA' : 'Analyse simplifiée'">
                 </span>
             </template>
         </div>
@@ -324,7 +323,7 @@
                                    bg-green-600 hover:bg-green-700 active:scale-[0.98] transition-all">
                         Confirmer et créer
                     </button>
-                    <button @click="state = 'form'"
+                    <button @click="cancelDraft()"
                             class="px-4 py-3 rounded-lg font-semibold text-gray-600 text-sm
                                    bg-gray-100 hover:bg-gray-200 transition-colors">
                         Annuler
@@ -614,6 +613,20 @@ function supportForm() {
             }
         },
 
+
+        // Annuler l'écran de validation : le brouillon est supprimé, la saisie est conservée
+        async cancelDraft() {
+            const ticketId = this.result?.ticket_id;
+            this.state = 'form';
+            if (!ticketId) return;
+            try {
+                await fetch(`/support/tickets/${ticketId}/draft`, {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content },
+                });
+            } catch (e) { /* purgé automatiquement sous 24 h sinon */ }
+            this.result = null;
+        },
 
         async confirmEdited() {
             this.state = 'loading';

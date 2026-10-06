@@ -113,6 +113,15 @@ class SupportTicket extends Model
     // ─── Scopes ─────────────────────────────────────────
 
     /**
+     * Tickets réellement soumis : exclut les brouillons « à valider » que le commercial
+     * n'a pas confirmés (supprimés à l'annulation, purgés après 24 h sinon).
+     */
+    public function scopeSubmitted(Builder $query): Builder
+    {
+        return $query->where('status', '!=', 'needs_review');
+    }
+
+    /**
      * Tickets visibles par un utilisateur (toujours limités à son organisation) :
      * - admin       : tous les tickets de l'organisation
      * - admin équipe: les tickets de son équipe + les siens
@@ -175,6 +184,34 @@ class SupportTicket extends Model
             'hours' => round($category->median_resolution_seconds / 3600, 1),
             'count' => (int) $category->resolution_sample_count,
         ];
+    }
+
+    /**
+     * Statut affiché, identique sur toutes les pages (liste, détail, suivi, accueil).
+     * Le statut GLPI synchronisé prime ; sinon le statut Zeno.
+     *
+     * @return array{label: string, class: string, dot: string, group: string}
+     */
+    public function statusBadge(): array
+    {
+        $gray   = ['class' => 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',        'dot' => 'bg-gray-400'];
+        $blue   = ['class' => 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',         'dot' => 'bg-blue-500'];
+        $amber  = ['class' => 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',      'dot' => 'bg-amber-400'];
+        $green  = ['class' => 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'];
+        $red    = ['class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',            'dot' => 'bg-red-500'];
+        $glpi   = (int) $this->glpi_status;
+
+        return match (true) {
+            $this->status === 'closed' || $glpi === 6   => ['label' => 'Clôturé', 'group' => 'resolu'] + $gray,
+            $this->status === 'resolved' || $glpi === 5 => ['label' => 'Résolu', 'group' => 'resolu'] + $green,
+            $this->status === 'needs_review'             => ['label' => 'Brouillon', 'group' => 'attente'] + $amber,
+            $this->status === 'queued'                   => ['label' => "En attente d'envoi", 'group' => 'attente'] + $amber,
+            $this->status === 'failed'                   => ['label' => "Échec d'envoi", 'group' => 'attente'] + $red,
+            $glpi === 4                                  => ['label' => 'En attente', 'group' => 'attente'] + $amber,
+            in_array($glpi, [2, 3], true)                => ['label' => 'En cours', 'group' => 'en_cours'] + $blue,
+            $glpi === 1                                  => ['label' => 'Nouveau', 'group' => 'en_cours'] + $blue,
+            default                                      => ['label' => 'Transmis au support', 'group' => 'en_cours'] + $blue,
+        };
     }
 
     public function markAsCreatedInGlpi(int $glpiTicketId): void

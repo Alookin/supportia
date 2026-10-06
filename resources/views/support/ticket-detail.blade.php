@@ -34,16 +34,7 @@
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
                         @php
-                            $statusConfig = match($ticket->status) {
-                                'created' => ['label' => 'Créé',       'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
-                                'pending' => ['label' => 'En attente', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
-                                'needs_review' => ['label' => 'À valider', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
-                                'queued'  => ['label' => 'En file',    'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',         'dot' => 'bg-blue-400'],
-                                'failed'  => ['label' => 'Échec',      'class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',            'dot' => 'bg-red-500'],
-                                'resolved'=> ['label' => 'Résolu',     'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
-                                'closed'  => ['label' => 'Fermé',      'class' => 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',          'dot' => 'bg-gray-500'],
-                                default   => ['label' => $ticket->status ?? '—', 'class' => 'bg-gray-100 text-gray-500', 'dot' => 'bg-gray-300'],
-                            };
+                            $statusConfig = $ticket->statusBadge();
                             $priorityConfig = match($ticket->ai_priority) {
                                 1 => ['label' => 'Très basse', 'class' => 'bg-gray-100 text-gray-500 ring-1 ring-gray-200'],
                                 2 => ['label' => 'Basse',      'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200'],
@@ -101,6 +92,7 @@
                         <dt class="text-xs font-semibold uppercase tracking-wider text-gray-400">Commercial</dt>
                         <dd class="mt-1 text-sm text-gray-800">{{ $ticket->user?->name ?? '—' }}</dd>
                     </div>
+                    @if(auth()->user()->canSupervise())
 
                     <div>
                         <dt class="text-xs font-semibold uppercase tracking-wider text-gray-400">Confiance IA</dt>
@@ -122,6 +114,7 @@
                             @endif
                         </dd>
                     </div>
+                    @endif
 
                     <div>
                         <dt class="text-xs font-semibold uppercase tracking-wider text-gray-400">Classification</dt>
@@ -129,12 +122,12 @@
                             @if(in_array($ticket->ai_provider, ['claude', 'local'], true))
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 ring-1 ring-blue-200">
                                     <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                                    {{ $ticket->ai_provider === 'local' ? 'IA locale' : 'Claude IA' }}
+                                    Analyse IA
                                 </span>
                             @elseif($ticket->ai_provider)
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
                                     <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
-                                    Fallback mots-clés
+                                    Classement simplifié (mots-clés)
                                 </span>
                             @else
                                 <span class="text-sm text-gray-400">—</span>

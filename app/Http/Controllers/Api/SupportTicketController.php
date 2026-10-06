@@ -217,6 +217,25 @@ class SupportTicketController extends Controller
     }
 
     /**
+     * DELETE /support/tickets/{ticket}/draft
+     *
+     * Le commercial annule l'écran de validation : le brouillon (jamais envoyé) est supprimé,
+     * pièces jointes comprises.
+     */
+    public function cancelDraft(Request $request, SupportTicket $ticket): JsonResponse
+    {
+        $this->authorize('confirm', $ticket);
+
+        if ($ticket->status !== TicketStatus::NeedsReview->value || $ticket->glpi_ticket_id) {
+            return response()->json(['error' => 'Ce ticket a déjà été envoyé au support.'], 409);
+        }
+
+        $ticket->delete();
+
+        return response()->json(['status' => 'deleted']);
+    }
+
+    /**
      * GET /support/tickets/open-for-client?client_id=4521
      *
      * Tickets encore ouverts pour ce client (30 derniers jours), pour éviter les doublons.
@@ -233,7 +252,7 @@ class SupportTicketController extends Controller
         }
 
         $tickets = SupportTicket::where('organization_id', $user->organization_id)
-            ->whereIn('status', [TicketStatus::NeedsReview->value, TicketStatus::Queued->value, TicketStatus::Created->value])
+            ->whereIn('status', [TicketStatus::Queued->value, TicketStatus::Created->value])
             ->where('created_at', '>=', now()->subDays(30))
             ->whereNotNull('client_ids')
             ->orderByDesc('created_at')

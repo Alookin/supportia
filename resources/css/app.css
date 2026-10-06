@@ -62,7 +62,7 @@ html.dark .text-gray-700 { color: #cfd8e3; }
 html.dark .text-gray-600 { color: #b3bfcf; }
 html.dark .text-gray-500 { color: #94a3b8; }
 html.dark .text-gray-400 { color: #7d8ca3; }
-html.dark .text-gray-300, html.dark .text-gray-200 { color: #5f6f86; }
+html.dark .text-gray-300, html.dark .text-gray-200 { color: #8494ab; }   /* ≥ 4,5:1 sur les cartes */
 html.dark .hover\:text-gray-900:hover, html.dark .hover\:text-gray-700:hover, html.dark .hover\:text-gray-600:hover { color: #f1f5f9; }
 
 /* Bordures, séparateurs, anneaux */
@@ -90,7 +90,7 @@ html.dark .text-emerald-600, html.dark .text-emerald-700, html.dark .text-green-
 html.dark .text-yellow-600, html.dark .text-yellow-700 { color: #fde047; }
 html.dark .text-amber-600, html.dark .text-amber-700, html.dark .text-amber-800, html.dark .text-amber-900 { color: #fcd34d; }
 html.dark .text-orange-700 { color: #fdba74; }
-html.dark .text-red-600, html.dark .text-red-700 { color: #fca5a5; }
+html.dark .text-red-500, html.dark .text-red-600, html.dark .text-red-700 { color: #fca5a5; }
 
 html.dark .ring-blue-200    { --tw-ring-color: rgba(59,130,246,.35); }
 html.dark .ring-emerald-200 { --tw-ring-color: rgba(16,185,129,.35); }
@@ -108,7 +108,7 @@ html.dark input[type="text"], html.dark input[type="email"], html.dark input[typ
 html.dark input[type="number"], html.dark input[type="search"], html.dark textarea, html.dark select {
     background-color: #0e1726; color: #e2e8f0; border-color: #34455f;
 }
-html.dark ::placeholder { color: #5f6f86; }
+html.dark ::placeholder { color: #7d8ca3; }
 html.dark input[type="checkbox"] { background-color: #0e1726; border-color: #46597a; }
 
 /* Bandeau mode test */

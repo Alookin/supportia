@@ -11,11 +11,11 @@ Route::get('/dashboard', function () {
     $user = auth()->user();
     $firstName = explode(' ', trim($user->name))[0];
 
-    $weekTickets = \App\Models\SupportTicket::where('user_id', $user->id)
+    $weekTickets = \App\Models\SupportTicket::where('user_id', $user->id)->submitted()
         ->where('created_at', '>=', now()->startOfWeek())
         ->count();
 
-    $lastTicket = \App\Models\SupportTicket::where('user_id', $user->id)
+    $lastTicket = \App\Models\SupportTicket::where('user_id', $user->id)->submitted()
         ->orderByDesc('created_at')
         ->first();
 
@@ -48,5 +48,6 @@ Route::middleware(['auth', 'org.active'])->prefix('support')->group(function () 
     Route::get('/tickets/open-for-client', [SupportTicketController::class, 'openForClient'])->middleware('throttle:60,1')->name('support.open-for-client');
     Route::get('/tickets', [SupportTicketController::class, 'index']);
     Route::post('/tickets', [SupportTicketController::class, 'store'])->middleware('throttle:20,1');
+    Route::delete('/tickets/{ticket}/draft', [SupportTicketController::class, 'cancelDraft'])->name('support.cancel-draft');
     Route::post('/tickets/{ticket}/confirm', [SupportTicketController::class, 'confirm'])->middleware('throttle:20,1');
 });

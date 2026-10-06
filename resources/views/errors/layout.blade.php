@@ -4,6 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $title }} — Zeno</title>
+    <script>
+        try { if ((localStorage.getItem('zeno-theme') || 'dark') === 'dark') document.documentElement.classList.add('dark'); }
+        catch (e) { document.documentElement.classList.add('dark'); }
+    </script>
     @vite(['resources/css/app.css'])
 </head>
 <body class="font-sans antialiased zeno-page min-h-screen flex items-center justify-center p-6">

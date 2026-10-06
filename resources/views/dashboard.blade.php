@@ -114,14 +114,7 @@
 
                         @if($lastTicket)
                             @php
-                                $statusConfig = match($lastTicket->status) {
-                                    'created' => ['label' => 'Créé',       'class' => 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200', 'dot' => 'bg-emerald-500'],
-                                    'pending' => ['label' => 'En attente', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
-                                    'needs_review' => ['label' => 'À valider', 'class' => 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200',   'dot' => 'bg-yellow-400'],
-                                    'queued'  => ['label' => 'En file',    'class' => 'bg-blue-50 text-blue-600 ring-1 ring-blue-200',         'dot' => 'bg-blue-400'],
-                                    'failed'  => ['label' => 'Échec',      'class' => 'bg-red-50 text-red-600 ring-1 ring-red-200',            'dot' => 'bg-red-500'],
-                                    default   => ['label' => '—',          'class' => 'bg-gray-100 text-gray-500',                             'dot' => 'bg-gray-300'],
-                                };
+                                $statusConfig = $lastTicket->statusBadge();
                             @endphp
                             <div class="flex items-start justify-between gap-4">
                                 <div class="min-w-0">

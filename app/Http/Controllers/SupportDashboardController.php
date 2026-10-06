@@ -31,13 +31,13 @@ class SupportDashboardController extends Controller
             : collect();
 
         // ─── Stats cards ──────────────────────────────────────────
-        $totalTickets = SupportTicket::visibleTo($user)->count();
+        $totalTickets = SupportTicket::visibleTo($user)->submitted()->count();
 
-        $todayTickets = SupportTicket::visibleTo($user)
+        $todayTickets = SupportTicket::visibleTo($user)->submitted()
             ->whereDate('created_at', today())
             ->count();
 
-        $autoClassified = SupportTicket::visibleTo($user)
+        $autoClassified = SupportTicket::visibleTo($user)->submitted()
             ->where('ai_confidence', '>=', config('supportia.confidence_threshold', 0.7))
             ->count();
 
@@ -50,7 +50,7 @@ class SupportDashboardController extends Controller
         $slugToGlpiId = $org
             ? GlpiCategoryMap::where('organization_id', $orgId)->pluck('glpi_category_id', 'slug')
             : collect();
-        $checked = SupportTicket::visibleTo($user)
+        $checked = SupportTicket::visibleTo($user)->submitted()
             ->where('glpi_category_id_final', '>', 0)
             ->get(['ai_category_slug', 'glpi_category_id_final']);
         $aiAccuracyCount = $checked->count();
@@ -59,7 +59,7 @@ class SupportDashboardController extends Controller
             : null;
 
         // ─── Top 5 categories (horizontal bar chart) ─────────────
-        $topCategories = SupportTicket::visibleTo($user)
+        $topCategories = SupportTicket::visibleTo($user)->submitted()
             ->whereNotNull('ai_category_slug')
             ->selectRaw('ai_category_slug, count(*) as total')
             ->groupBy('ai_category_slug')
@@ -77,7 +77,7 @@ class SupportDashboardController extends Controller
         // ─── Tickets par jour — 7 derniers jours (bar chart) ──────
         $sevenDaysAgo = today()->subDays(6)->startOfDay();
 
-        $rawByDay = SupportTicket::visibleTo($user)
+        $rawByDay = SupportTicket::visibleTo($user)->submitted()
             ->where('created_at', '>=', $sevenDaysAgo)
             ->selectRaw("DATE(created_at) as day, count(*) as total")
             ->groupBy('day')
@@ -95,7 +95,7 @@ class SupportDashboardController extends Controller
         $maxDayCount = $ticketsByDay->max('count') ?: 1;
 
         // ─── Tickets par catégorie — top 10 ──────────────────────
-        $categoryDistribution = SupportTicket::visibleTo($user)
+        $categoryDistribution = SupportTicket::visibleTo($user)->submitted()
             ->whereNotNull('ai_category_slug')
             ->selectRaw('ai_category_slug, count(*) as total')
             ->groupBy('ai_category_slug')
@@ -109,7 +109,7 @@ class SupportDashboardController extends Controller
         $maxCategoryDistCount = $categoryDistribution->max('count') ?: 1;
 
         // ─── Tickets par priorité ────────────────────────────────
-        $ticketsByPriority = SupportTicket::visibleTo($user)
+        $ticketsByPriority = SupportTicket::visibleTo($user)->submitted()
             ->whereNotNull('ai_priority')
             ->selectRaw('ai_priority, count(*) as total')
             ->groupBy('ai_priority')
@@ -132,7 +132,7 @@ class SupportDashboardController extends Controller
 
 
         // ─── Last 20 tickets ──────────────────────────────────────
-        $tickets = SupportTicket::visibleTo($user)
+        $tickets = SupportTicket::visibleTo($user)->submitted()
             ->with('user:id,name')
             ->orderByDesc('created_at')
             ->limit(20)
@@ -297,7 +297,7 @@ class SupportDashboardController extends Controller
 
         abort_if(! $user->organization_id, 403, 'Aucune organisation active associée à votre compte.');
 
-        return $this->ticketList(SupportTicket::where('organization_id', $user->organization_id)->where('user_id', $user->id), false);
+        return $this->ticketList(SupportTicket::where('organization_id', $user->organization_id)->where('user_id', $user->id)->submitted(), false);
     }
 
     /**
@@ -309,7 +309,7 @@ class SupportDashboardController extends Controller
 
         abort_unless($user->canSupervise(), 403, 'Réservé aux administrateurs.');
 
-        return $this->ticketList(SupportTicket::visibleTo($user), true, $user->isAdmin() ? 'Tous les tickets' : 'Tickets de l\'équipe '.$user->team?->name);
+        return $this->ticketList(SupportTicket::visibleTo($user)->submitted(), true, $user->isAdmin() ? 'Tous les tickets' : 'Tickets de l\'équipe '.$user->team?->name);
     }
 
     private function ticketList($base, bool $teamView, ?string $title = null): View
@@ -358,7 +358,7 @@ class SupportDashboardController extends Controller
 
         abort_if(! $orgId, 403);
 
-        $ticket = SupportTicket::visibleTo($user)
+        $ticket = SupportTicket::visibleTo($user)->submitted()
             ->where('id', $id)
             ->firstOrFail();
 

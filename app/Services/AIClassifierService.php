@@ -286,10 +286,7 @@ PROMPT;
         }
 
         return [
-            'title'         => mb_substr(
-                                    preg_split('/[.?!,]/', trim($description))[0],
-                                    0, 80
-                                ),
+            'title'         => self::shortTitle(preg_split('/[.?!,]/', trim($description))[0]),
             'body'          => $description,
             'category_slug' => $bestSlug,
             'priority'      => 3, // par défaut en mode dégradé
@@ -321,5 +318,18 @@ PROMPT;
         } catch (\Throwable $e) {
             Log::error('Failed to log AI request', ['error' => $e->getMessage()]);
         }
+    }
+
+    /** Titre ≤ 80 caractères, coupé sur un mot entier, avec « … » si tronqué. */
+    public static function shortTitle(string $text, int $max = 80): string
+    {
+        $text = trim(preg_replace('/\s+/', ' ', $text));
+        if (mb_strlen($text) <= $max) {
+            return $text;
+        }
+        $cut = mb_substr($text, 0, $max - 1);
+        $space = mb_strrpos($cut, ' ');
+
+        return rtrim($space > 40 ? mb_substr($cut, 0, $space) : $cut, ' ,;:-') . '…';
     }
 }

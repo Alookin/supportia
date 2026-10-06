@@ -20,3 +20,6 @@ Schedule::command('glpi:sync-ticket-statuses')->everyTenMinutes()->withoutOverla
 
 // Délai de résolution médian par catégorie (estimation affichée au commercial)
 Schedule::command('glpi:sync-resolution-stats')->dailyAt('03:17')->withoutOverlapping();
+
+// Brouillons « à valider » abandonnés (jamais confirmés par le commercial)
+Schedule::command('zeno:prune-drafts')->dailyAt('02:41');

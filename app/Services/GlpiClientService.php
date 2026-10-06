@@ -166,7 +166,7 @@ class GlpiClientService
         if (self::dryRun() && $glpiTicketId >= 900000) {
             return [
                 'status'          => 2,
-                'status_label'    => 'En cours (assigné) — simulation',
+                'status_label'    => 'En cours',
                 'assigned_to'     => 'Technicien (simulation)',
                 'resolution_date' => null,
                 'followups'       => [],
