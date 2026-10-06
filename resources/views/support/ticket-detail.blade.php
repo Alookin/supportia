@@ -293,55 +293,55 @@
 
                 {{-- Zone messages --}}
                 <div id="chat-messages"
-                     class="px-6 py-4 space-y-4"
+                     class="px-6 py-4"
                      style="max-height:500px;overflow-y:auto"
                      x-init="$el.scrollTop = $el.scrollHeight">
                     @if(empty($messages))
                         <p class="text-sm text-gray-400 text-center py-8">Aucun message pour le moment.</p>
                     @else
+                        @php $prevKey = null; @endphp
                         @foreach($messages as $msg)
                             @php
                                 $isCommercial = $msg['type'] === 'commercial';
                                 $isMe         = $isCommercial && $msg['user_id'] === auth()->id();
                                 $authorLabel  = $isMe ? 'Vous' : ($msg['author'] ?? ($isCommercial ? '—' : 'Technicien'));
                                 $initial      = strtoupper(mb_substr($msg['author'] ?? ($isCommercial ? '?' : 'T'), 0, 1));
+                                $msgKey       = $msg['type'] . '|' . ($msg['user_id'] ?? $msg['author'] ?? '');
+                                $sameAsPrev   = $msgKey === $prevKey;
+                                $prevKey      = $msgKey;
+                                $text         = trim((string) ($msg['content'] ?? ''));
                             @endphp
-                            <div class="flex {{ $isCommercial ? 'flex-row-reverse' : 'flex-row' }} items-end gap-2">
-                                <div class="shrink-0 w-8 h-8 rounded-full flex items-center justify-center
+                            <div class="flex {{ $isCommercial ? 'flex-row-reverse' : 'flex-row' }} items-end gap-2 {{ $loop->first ? '' : ($sameAsPrev ? 'mt-1' : 'mt-4') }}">
+                                <div class="shrink-0 w-8 h-8 rounded-full flex items-center justify-center {{ $sameAsPrev ? 'invisible' : '' }}
                                             {{ $isCommercial ? 'bg-blue-600' : 'bg-gray-200' }}">
-                                    <span class="text-xs font-bold {{ $isCommercial ? 'text-white' : 'text-gray-500' }}">
-                                        {{ $initial }}
-                                    </span>
+                                    <span class="text-xs font-bold {{ $isCommercial ? 'text-white' : 'text-gray-500' }}">{{ $initial }}</span>
                                 </div>
-                                <div class="max-w-[75%]">
-                                    <div class="flex {{ $isCommercial ? 'flex-row-reverse' : 'flex-row' }} items-baseline gap-2 mb-1">
-                                        <span class="text-xs font-semibold {{ $isCommercial ? 'text-blue-600' : 'text-gray-500' }}">
-                                            {{ $authorLabel }}
-                                        </span>
-                                        @if($msg['date'])
-                                            <span class="text-xs text-gray-400">
-                                                {{ $msg['date']->translatedFormat('d F Y à H:i') }}
-                                            </span>
-                                        @endif
-                                    </div>
-                                    <div class="rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap
-                                                {{ $isCommercial
-                                                    ? 'bg-blue-600 text-white rounded-br-sm'
-                                                    : 'bg-gray-100 text-gray-800 rounded-bl-sm' }}">
-                                        @if(! empty($msg['content'])){{ $msg['content'] }}@endif
+                                <div class="min-w-0 max-w-[75%] flex flex-col {{ $isCommercial ? 'items-end' : 'items-start' }}">
+                                    @unless($sameAsPrev)
+                                        <div class="flex {{ $isCommercial ? 'flex-row-reverse' : 'flex-row' }} items-baseline gap-2 mb-1">
+                                            <span class="text-xs font-semibold {{ $isCommercial ? 'text-blue-600' : 'text-gray-500' }}">{{ $authorLabel }}</span>
+                                            @if($msg['date'])
+                                                <span class="text-xs text-gray-400">{{ $msg['date']->translatedFormat('d F Y à H:i') }}</span>
+                                            @endif
+                                        </div>
+                                    @endunless
+                                    <div class="chat-bubble w-fit max-w-full rounded-2xl px-4 py-2.5 text-sm
+                                                {{ $isCommercial ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-gray-100 text-gray-800 rounded-bl-sm' }}"
+                                         @if($sameAsPrev && $msg['date']) title="{{ $msg['date']->translatedFormat('d F Y à H:i') }}" @endif>
+                                        @if($text !== '')<p class="whitespace-pre-wrap break-words">{{ $text }}</p>@endif
                                         {{-- Pièce jointe du commentaire --}}
                                         @if($msg['attachment'] ?? null)
                                             @php $att = $msg['attachment']; @endphp
                                             @if($att->isImage())
                                                 <a href="{{ route('support.ticket-attachment', [$ticket->id, $att->id]) }}"
-                                                   target="_blank" class="block {{ !empty($msg['content']) ? 'mt-2' : '' }}">
+                                                   target="_blank" class="block {{ $text !== '' ? 'mt-2' : '' }}">
                                                     <img src="{{ route('support.ticket-attachment', [$ticket->id, $att->id]) }}"
                                                          alt="{{ e($att->original_name) }}"
                                                          class="max-w-[200px] rounded-xl {{ $isCommercial ? 'border border-white/20' : 'border border-gray-200' }}">
                                                 </a>
                                             @else
                                                 <a href="{{ route('support.ticket-attachment', [$ticket->id, $att->id]) }}"
-                                                   class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs {{ !empty($msg['content']) ? 'mt-2' : '' }}
+                                                   class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs {{ $text !== '' ? 'mt-2' : '' }}
                                                           {{ $isCommercial ? 'bg-white/20 text-white' : 'bg-white text-gray-600 border border-gray-200' }}">
                                                     <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                         <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
