@@ -24,6 +24,23 @@ return [
         'api_key'  => env('LOCAL_AI_API_KEY'),
     ],
 
+    // Tarifs des modèles, en dollars US par million de tokens, pour le coût estimé de chaque appel
+    // (ai_request_logs.estimated_cost, figé au moment de l'appel). À renseigner : tant qu'un tarif
+    // vaut null, le coût du modèle n'est pas estimé. cached_input null = même tarif que input.
+    // Après saisie, `php artisan zeno:estimate-ai-costs` complète les appels déjà enregistrés.
+    'ai_pricing' => [
+        'gpt-5.4-mini' => [
+            'input'        => null,
+            'cached_input' => null,
+            'output'       => null,
+        ],
+        'claude-sonnet-4-20250514' => [
+            'input'        => null,
+            'cached_input' => null,
+            'output'       => null,
+        ],
+    ],
+
     'claude_api_key' => env('CLAUDE_API_KEY'),
     'claude_model' => env('CLAUDE_MODEL', 'claude-sonnet-4-20250514'),
     // Sonnet met souvent plus de 5 s à répondre : un timeout trop court déclenche le fallback mots-clés
