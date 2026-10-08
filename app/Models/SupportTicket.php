@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\Storage;
 
 class SupportTicket extends Model
 {
+    /** Moteurs d'IA réels. Tout autre ai_provider (fallback_keywords, manual) = analyse simplifiée. */
+    public const AI_PROVIDERS = ['openai', 'claude', 'local'];
+
     protected $fillable = [
         'organization_id',
         'user_id',
@@ -158,6 +161,40 @@ class SupportTicket extends Model
 
     // ─── Actions ────────────────────────────────────────
 
+
+    // ─── Affichage ──────────────────────────────────────
+
+    /**
+     * Libellé du moteur côté commercial, identique sur tous les écrans
+     * (jamais « mots-clés », qui ne lui parle pas).
+     */
+    public static function analysisLabel(?string $provider): string
+    {
+        return in_array($provider, self::AI_PROVIDERS, true) ? 'Analyse IA' : 'Analyse simplifiée';
+    }
+
+    public function wasAnalyzedByAi(): bool
+    {
+        return in_array($this->ai_provider, self::AI_PROVIDERS, true);
+    }
+
+    /** Numéro GLPI affiché (#900001), ou null tant que le ticket n'est pas créé dans GLPI. */
+    public function displayNumber(): ?string
+    {
+        return $this->glpi_ticket_id ? '#' . $this->glpi_ticket_id : null;
+    }
+
+    /**
+     * La description originale apporte-t-elle quelque chose par rapport à la description affichée ?
+     * Non quand les deux textes sont identiques (analyse simplifiée sans retouche, notamment).
+     */
+    public function hasDistinctOriginalDescription(): bool
+    {
+        $normalize = fn (?string $text) => trim(preg_replace('/\s+/u', ' ', (string) $text));
+
+        return $normalize($this->raw_description) !== ''
+            && $normalize($this->raw_description) !== $normalize($this->ai_body);
+    }
 
     /**
      * Délai habituel de traitement de la catégorie du ticket (médiane GLPI sur 12 mois),
