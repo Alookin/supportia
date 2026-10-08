@@ -4,12 +4,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Claude API
+    | Moteurs d'IA
     |--------------------------------------------------------------------------
     */
-    // Moteur de classification : « claude » (API Anthropic) ou « local » (serveur compatible
-    // OpenAI : Ollama → http://127.0.0.1:11434/v1, LM Studio → http://127.0.0.1:1234/v1).
-    'ai_provider' => env('AI_PROVIDER', 'claude'),
+    // Moteur de classification : « openai » (API OpenAI, par défaut), « claude » (API Anthropic)
+    // ou « local » (serveur auto-hébergé compatible OpenAI : Ollama → http://127.0.0.1:11434/v1,
+    // LM Studio → http://127.0.0.1:1234/v1 ; interdit en production).
+    'ai_provider' => env('AI_PROVIDER', 'openai'),
+    'openai' => [
+        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        'api_key'  => env('OPENAI_API_KEY'),
+        'model'    => env('OPENAI_MODEL', 'gpt-5.4-mini'),
+        // gpt-5.4-mini répond en ~2 s (benchmark du 08/10/2026) : 10 s laissent de la marge
+        'timeout'  => (int) env('OPENAI_TIMEOUT', 10),
+    ],
     'local_ai' => [
         'base_url' => env('LOCAL_AI_BASE_URL', 'http://127.0.0.1:11434/v1'),
         'model'    => env('LOCAL_AI_MODEL'),

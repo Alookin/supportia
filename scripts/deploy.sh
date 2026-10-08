@@ -36,8 +36,18 @@ grep -q '^APP_KEY=.\+'         .env || fail "APP_KEY vide. Lancer : $PHP_BIN art
 if grep -q '^GLPI_DRY_RUN=true' .env; then
     fail "GLPI_DRY_RUN=true : aucun ticket ne serait créé dans GLPI."
 fi
-if grep -q '^AI_PROVIDER=local' .env; then
+# Valeur d'une variable du .env (dernière occurrence, guillemets et espaces retirés)
+env_value() { { grep "^$1=" .env || true; } | tail -n 1 | cut -d= -f2- | sed -e 's/[[:space:]]*$//' -e 's/^["'\'']//' -e 's/["'\'']$//'; }
+
+AI_PROVIDER_VALUE="$(env_value AI_PROVIDER)"
+AI_PROVIDER_VALUE="${AI_PROVIDER_VALUE:-openai}"   # même défaut que config/supportia.php
+if [ "$AI_PROVIDER_VALUE" = "local" ]; then
     fail "AI_PROVIDER=local interdit en production : moteur d'IA hors du périmètre Via-Mobilis, réservé aux démos."
+fi
+if [ "$AI_PROVIDER_VALUE" = "openai" ]; then
+    case "$(env_value OPENAI_API_KEY)" in
+        ''|'<'*) fail "OPENAI_API_KEY vide alors que le moteur d'IA est openai : la classification tomberait sur le fallback mots-clés." ;;
+    esac
 fi
 
 command -v "$PHP_BIN" >/dev/null     || fail "php introuvable (PHP_BIN=$PHP_BIN)."

@@ -119,7 +119,7 @@
                     <div>
                         <dt class="text-xs font-semibold uppercase tracking-wider text-gray-400">Classification</dt>
                         <dd class="mt-1">
-                            @if(in_array($ticket->ai_provider, ['claude', 'local'], true))
+                            @if(in_array($ticket->ai_provider, ['openai', 'claude', 'local'], true))
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 ring-1 ring-blue-200">
                                     <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                                     Analyse IA

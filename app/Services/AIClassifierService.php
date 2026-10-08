@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\AiProviderIncidentException;
 use App\Models\AiRequestLog;
 use App\Models\GlpiCategoryMap;
 use App\Models\Organization;
@@ -85,14 +86,23 @@ class AIClassifierService
         $categories = $organization->activeCategories()->forTeam($teamId)->get();
         $prompt = $this->buildPrompt($description, $clientName, $categories);
 
+        // Toute autre valeur que « openai » ou « local » retombe sur Claude
+        $provider = match (config('supportia.ai_provider')) {
+            'openai' => 'openai',
+            'local'  => 'local',
+            default  => 'claude',
+        };
+
         try {
             $start = microtime(true);
-            $result = config('supportia.ai_provider') === 'local'
-                ? $this->callLocal($prompt)
-                : $this->callClaude($organization, $prompt);
+            $result = match ($provider) {
+                'openai' => $this->callOpenAi($prompt),
+                'local'  => $this->callLocal($prompt),
+                'claude' => $this->callClaude($organization, $prompt),
+            };
             $latencyMs = (int) ((microtime(true) - $start) * 1000);
 
-            $result['provider'] = config('supportia.ai_provider') === 'local' ? 'local' : 'claude';
+            $result['provider'] = $provider;
             $result['_meta']    = ['latency_ms' => $latencyMs, 'error' => null] + ($result['_meta'] ?? []);
 
             if ($ticket) {
@@ -101,11 +111,14 @@ class AIClassifierService
 
             return $result;
         } catch (\Throwable $e) {
-            Log::warning('AI classification failed, using keyword fallback', [
-                'provider'     => config('supportia.ai_provider'),
-                'organization' => $organization->slug,
-                'error'        => $e->getMessage(),
-            ]);
+            // Les incidents (clé, quota) sont déjà journalisés en error par le moteur
+            if (! $e instanceof AiProviderIncidentException) {
+                Log::warning('AI classification failed, using keyword fallback', [
+                    'provider'     => config('supportia.ai_provider'),
+                    'organization' => $organization->slug,
+                    'error'        => $e->getMessage(),
+                ]);
+            }
 
             $result = $this->fallbackClassify($description, $categories);
             $result['_meta'] = ['latency_ms' => 0, 'error' => mb_substr($e->getMessage(), 0, 1000)];
@@ -119,7 +132,7 @@ class AIClassifierService
     }
 
     /**
-     * Construit le prompt de classification pour Claude.
+     * Construit le prompt de classification (commun à tous les moteurs).
      * Le prompt injecte dynamiquement les catégories de l'organisation.
      */
     private function buildPrompt(string $description, ?string $clientName, $categories): string
@@ -201,6 +214,62 @@ PROMPT;
             'prompt_tokens'     => $data['usage']['input_tokens'] ?? null,
             'completion_tokens' => $data['usage']['output_tokens'] ?? null,
         ]);
+    }
+
+    /**
+     * Appelle l'API OpenAI (Chat Completions) et parse la réponse JSON.
+     * Les modèles GPT-5.x refusent max_tokens : max_completion_tokens est obligatoire.
+     */
+    private function callOpenAi(string $prompt): array
+    {
+        $apiKey = config('supportia.openai.api_key');
+        $model  = config('supportia.openai.model');
+
+        if (empty($apiKey)) {
+            $this->openAiIncident(AiProviderIncidentException::OPENAI_KEY_MISSING, 'OpenAI : clé absente (OPENAI_API_KEY vide)', $model);
+        }
+
+        $response = Http::timeout(config('supportia.openai.timeout', 10))
+            ->withToken($apiKey)
+            ->post(rtrim((string) config('supportia.openai.base_url'), '/') . '/chat/completions', [
+                'model'                 => $model,
+                'max_completion_tokens' => 1024,
+                'temperature'           => 0,
+                'response_format'       => ['type' => 'json_object'],
+                'messages'              => [
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+            ]);
+
+        // Le corps d'erreur n'est pas recopié : sur un 401, OpenAI y cite un fragment de la clé
+        match ($response->status()) {
+            401 => $this->openAiIncident(AiProviderIncidentException::OPENAI_KEY_REJECTED, 'OpenAI : clé refusée (401)', $model, $response->json('error.code')),
+            429 => $this->openAiIncident(AiProviderIncidentException::OPENAI_QUOTA_EXCEEDED, 'OpenAI : quota épuisé (429)', $model, $response->json('error.code')),
+            default => $response->throw(),
+        };
+
+        $data = $response->json();
+
+        return $this->parseClassification($data['choices'][0]['message']['content'] ?? '', [
+            'model'             => (string) $model,
+            'prompt_tokens'     => $data['usage']['prompt_tokens'] ?? null,
+            'completion_tokens' => $data['usage']['completion_tokens'] ?? null,
+        ]);
+    }
+
+    /**
+     * Journalise en error un incident OpenAI qui demande une intervention, puis lève
+     * l'exception qui déclenche le fallback mots-clés (message « [CODE] … » dans ai_request_logs).
+     */
+    private function openAiIncident(string $incident, string $message, ?string $model, mixed $apiErrorCode = null): never
+    {
+        Log::error($message, array_filter([
+            'incident'       => $incident,
+            'model'          => $model,
+            'api_error_code' => is_scalar($apiErrorCode) ? (string) $apiErrorCode : null, // insufficient_quota, rate_limit_exceeded, invalid_api_key…
+        ]));
+
+        throw new AiProviderIncidentException($incident, $message);
     }
 
     /**
