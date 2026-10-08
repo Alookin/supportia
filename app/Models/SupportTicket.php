@@ -58,9 +58,11 @@ class SupportTicket extends Model
     {
         parent::boot();
 
-        // RGPD : suppression des fichiers physiques avant suppression du ticket
+        // RGPD : suppression des fichiers physiques avant suppression du ticket, et du texte client
+        // conservé dans les logs IA (qui survivent au ticket pour les compteurs de consommation)
         static::deleting(function (self $ticket): void {
             $ticket->deleteAttachments();
+            $ticket->aiRequestLogs()->update(['raw_response' => null, 'error' => null]);
         });
     }
 

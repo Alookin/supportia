@@ -29,15 +29,17 @@ return [
     // vaut null, le coût du modèle n'est pas estimé. cached_input null = même tarif que input.
     // Après saisie, `php artisan zeno:estimate-ai-costs` complète les appels déjà enregistrés.
     'ai_pricing' => [
+        // Source tierce datée du 06/10/2026, à confirmer dans le tableau de bord OpenAI
         'gpt-5.4-mini' => [
-            'input'        => null,
-            'cached_input' => null,
-            'output'       => null,
+            'input'        => 0.375,
+            'cached_input' => 0.037,
+            'output'       => 2.25,
         ],
+        // De mémoire, à vérifier (moteur plus utilisé, enjeu faible)
         'claude-sonnet-4-20250514' => [
-            'input'        => null,
+            'input'        => 3.00,
             'cached_input' => null,
-            'output'       => null,
+            'output'       => 15.00,
         ],
     ],
 
@@ -73,6 +75,11 @@ return [
     // Prévenir le demandeur par email quand son ticket est résolu dans GLPI
     // (désactiver si les notifications GLPI le font déjà, pour éviter les doublons).
     'notify_resolved' => (bool) env('ZENO_NOTIFY_RESOLVED', true),
+
+    // Contenu des logs IA (raw_response, error : texte rédigé à partir de la saisie du client) purgé
+    // au-delà de ce délai par zeno:prune-ai-log-content ; les compteurs (tokens, coût, durée, cause)
+    // sont conservés indéfiniment. Purge immédiate à la suppression du ticket (SupportTicket::boot).
+    'ai_log_content_retention_days' => (int) env('ZENO_AI_LOG_CONTENT_RETENTION_DAYS', 90),
 
     // Au-delà, le délai habituel n'est pas affiché au commercial (médianes de 12 à 21 jours
     // sur Bug mails, Traductions, Évolutions : décourageant et peu informatif).

@@ -23,3 +23,6 @@ Schedule::command('glpi:sync-resolution-stats')->dailyAt('03:17')->withoutOverla
 
 // Brouillons « à valider » abandonnés (jamais confirmés par le commercial)
 Schedule::command('zeno:prune-drafts')->dailyAt('02:41');
+
+// Contenu des logs IA au-delà du délai de rétention (les compteurs restent)
+Schedule::command('zeno:prune-ai-log-content')->dailyAt('02:51');
