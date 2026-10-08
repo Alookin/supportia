@@ -42,10 +42,15 @@ sed -i 's/# DB_PASSWORD=/DB_PASSWORD=your_password_here/' .env
 cat >> .env << 'EOF'
 
 # ═══ SupportIA ═══
-CLAUDE_API_KEY=sk-ant-YOUR_KEY_HERE
-CLAUDE_MODEL=claude-sonnet-4-20250514
+# Moteur de classification : openai (défaut), claude, ou local (jamais en production)
+AI_PROVIDER=openai
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.4-mini
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_TIMEOUT=10
 SUPPORTIA_CONFIDENCE_THRESHOLD=0.7
-SUPPORTIA_AI_TIMEOUT=5
+# Timeout des moteurs claude et local uniquement
+SUPPORTIA_AI_TIMEOUT=25
 EOF
 
 # 5. Créer la base PostgreSQL
@@ -62,6 +67,9 @@ npm run build
 echo ""
 echo "═══════════════════════════════════════"
 echo "  Bootstrap terminé !"
+echo ""
+echo "  Renseigner OPENAI_API_KEY dans supportia/.env avant de créer un ticket"
+echo "  (sans clé, la classification bascule sur le fallback mots-clés)."
 echo ""
 echo "  Prochaines étapes avec Claude Code :"
 echo ""

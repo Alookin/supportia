@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\AiProviderIncidentException;
 use App\Models\AiRequestLog;
 use App\Models\GlpiCategoryMap;
 use App\Models\Organization;
@@ -110,11 +111,14 @@ class AIClassifierService
 
             return $result;
         } catch (\Throwable $e) {
-            Log::warning('AI classification failed, using keyword fallback', [
-                'provider'     => config('supportia.ai_provider'),
-                'organization' => $organization->slug,
-                'error'        => $e->getMessage(),
-            ]);
+            // Les incidents (clé, quota) sont déjà journalisés en error par le moteur
+            if (! $e instanceof AiProviderIncidentException) {
+                Log::warning('AI classification failed, using keyword fallback', [
+                    'provider'     => config('supportia.ai_provider'),
+                    'organization' => $organization->slug,
+                    'error'        => $e->getMessage(),
+                ]);
+            }
 
             $result = $this->fallbackClassify($description, $categories);
             $result['_meta'] = ['latency_ms' => 0, 'error' => mb_substr($e->getMessage(), 0, 1000)];
@@ -222,7 +226,7 @@ PROMPT;
         $model  = config('supportia.openai.model');
 
         if (empty($apiKey)) {
-            throw new \RuntimeException('OPENAI_API_KEY non configurée');
+            $this->openAiIncident(AiProviderIncidentException::OPENAI_KEY_MISSING, 'OpenAI : clé absente (OPENAI_API_KEY vide)', $model);
         }
 
         $response = Http::timeout(config('supportia.openai.timeout', 10))
@@ -237,7 +241,12 @@ PROMPT;
                 ],
             ]);
 
-        $response->throw();
+        // Le corps d'erreur n'est pas recopié : sur un 401, OpenAI y cite un fragment de la clé
+        match ($response->status()) {
+            401 => $this->openAiIncident(AiProviderIncidentException::OPENAI_KEY_REJECTED, 'OpenAI : clé refusée (401)', $model, $response->json('error.code')),
+            429 => $this->openAiIncident(AiProviderIncidentException::OPENAI_QUOTA_EXCEEDED, 'OpenAI : quota épuisé (429)', $model, $response->json('error.code')),
+            default => $response->throw(),
+        };
 
         $data = $response->json();
 
@@ -246,6 +255,21 @@ PROMPT;
             'prompt_tokens'     => $data['usage']['prompt_tokens'] ?? null,
             'completion_tokens' => $data['usage']['completion_tokens'] ?? null,
         ]);
+    }
+
+    /**
+     * Journalise en error un incident OpenAI qui demande une intervention, puis lève
+     * l'exception qui déclenche le fallback mots-clés (message « [CODE] … » dans ai_request_logs).
+     */
+    private function openAiIncident(string $incident, string $message, ?string $model, mixed $apiErrorCode = null): never
+    {
+        Log::error($message, array_filter([
+            'incident'       => $incident,
+            'model'          => $model,
+            'api_error_code' => is_scalar($apiErrorCode) ? (string) $apiErrorCode : null, // insufficient_quota, rate_limit_exceeded, invalid_api_key…
+        ]));
+
+        throw new AiProviderIncidentException($incident, $message);
     }
 
     /**
