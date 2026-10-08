@@ -85,14 +85,23 @@ class AIClassifierService
         $categories = $organization->activeCategories()->forTeam($teamId)->get();
         $prompt = $this->buildPrompt($description, $clientName, $categories);
 
+        // Toute autre valeur que « openai » ou « local » retombe sur Claude
+        $provider = match (config('supportia.ai_provider')) {
+            'openai' => 'openai',
+            'local'  => 'local',
+            default  => 'claude',
+        };
+
         try {
             $start = microtime(true);
-            $result = config('supportia.ai_provider') === 'local'
-                ? $this->callLocal($prompt)
-                : $this->callClaude($organization, $prompt);
+            $result = match ($provider) {
+                'openai' => $this->callOpenAi($prompt),
+                'local'  => $this->callLocal($prompt),
+                'claude' => $this->callClaude($organization, $prompt),
+            };
             $latencyMs = (int) ((microtime(true) - $start) * 1000);
 
-            $result['provider'] = config('supportia.ai_provider') === 'local' ? 'local' : 'claude';
+            $result['provider'] = $provider;
             $result['_meta']    = ['latency_ms' => $latencyMs, 'error' => null] + ($result['_meta'] ?? []);
 
             if ($ticket) {
@@ -119,7 +128,7 @@ class AIClassifierService
     }
 
     /**
-     * Construit le prompt de classification pour Claude.
+     * Construit le prompt de classification (commun à tous les moteurs).
      * Le prompt injecte dynamiquement les catégories de l'organisation.
      */
     private function buildPrompt(string $description, ?string $clientName, $categories): string
@@ -200,6 +209,42 @@ PROMPT;
             'model'             => (string) config('supportia.claude_model'),
             'prompt_tokens'     => $data['usage']['input_tokens'] ?? null,
             'completion_tokens' => $data['usage']['output_tokens'] ?? null,
+        ]);
+    }
+
+    /**
+     * Appelle l'API OpenAI (Chat Completions) et parse la réponse JSON.
+     * Les modèles GPT-5.x refusent max_tokens : max_completion_tokens est obligatoire.
+     */
+    private function callOpenAi(string $prompt): array
+    {
+        $apiKey = config('supportia.openai.api_key');
+        $model  = config('supportia.openai.model');
+
+        if (empty($apiKey)) {
+            throw new \RuntimeException('OPENAI_API_KEY non configurée');
+        }
+
+        $response = Http::timeout(config('supportia.openai.timeout', 10))
+            ->withToken($apiKey)
+            ->post(rtrim((string) config('supportia.openai.base_url'), '/') . '/chat/completions', [
+                'model'                 => $model,
+                'max_completion_tokens' => 1024,
+                'temperature'           => 0,
+                'response_format'       => ['type' => 'json_object'],
+                'messages'              => [
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+            ]);
+
+        $response->throw();
+
+        $data = $response->json();
+
+        return $this->parseClassification($data['choices'][0]['message']['content'] ?? '', [
+            'model'             => (string) $model,
+            'prompt_tokens'     => $data['usage']['prompt_tokens'] ?? null,
+            'completion_tokens' => $data['usage']['completion_tokens'] ?? null,
         ]);
     }
 

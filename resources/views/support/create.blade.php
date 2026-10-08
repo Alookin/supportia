@@ -21,10 +21,10 @@
             </div>
             <template x-if="result && result.provider">
                 <span class="ml-auto text-xs px-2 py-1 rounded-md font-semibold"
-                      :class="['claude', 'local'].includes(result.provider)
+                      :class="['openai', 'claude', 'local'].includes(result.provider)
                           ? 'bg-blue-50 text-blue-700'
                           : 'bg-amber-50 text-amber-700'"
-                      x-text="['claude', 'local'].includes(result.provider) ? 'Analyse IA' : 'Analyse simplifiée'">
+                      x-text="['openai', 'claude', 'local'].includes(result.provider) ? 'Analyse IA' : 'Analyse simplifiée'">
                 </span>
             </template>
         </div>
