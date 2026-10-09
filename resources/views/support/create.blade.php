@@ -161,7 +161,7 @@
                 <div class="mb-4">
                     <label class="block text-sm font-semibold text-gray-600 mb-1">
                         Pièces jointes
-                        <span class="font-normal text-gray-400">(optionnel · max 5 fichiers · 10 Mo chacun)</span>
+                        <span class="font-normal text-gray-400">(optionnel · max 5 fichiers · {{ \App\Models\TicketAttachment::maxSizeLabel() }} chacun)</span>
                     </label>
                     <div class="border-2 border-dashed rounded-lg transition-colors"
                          :class="attachments.length > 0 ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200 hover:border-blue-300'"
@@ -170,7 +170,7 @@
                          @drop.prevent="$event.currentTarget.classList.remove('border-blue-400','bg-blue-50'); addAttachments($event.dataTransfer.files)">
 
                         <input type="file" x-ref="fileInput"
-                               accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.csv,.txt,.log"
+                               accept="{{ \App\Models\TicketAttachment::acceptAttribute() }}"
                                multiple class="hidden"
                                @change="addAttachments($event.target.files); $event.target.value = ''">
 
@@ -181,7 +181,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 002.112 2.13" />
                                 </svg>
                                 <p class="text-sm text-gray-400">Cliquez ou déposez vos fichiers</p>
-                                <p class="text-xs text-gray-300 mt-0.5">Images, PDF, CSV, TXT, LOG</p>
+                                <p class="text-xs text-gray-300 mt-0.5">{{ ucfirst(\App\Models\TicketAttachment::formatsLabel()) }}</p>
                             </div>
                         </template>
 
@@ -542,12 +542,12 @@ function supportForm() {
         // ─── Pièces jointes ─────────────────
 
         addAttachments(files) {
-            const maxSize = 10 * 1024 * 1024; // 10 Mo
+            const maxSize = @js(\App\Models\TicketAttachment::maxSizeKb()) * 1024; // supportia.attachments.max_size_kb
 
             Array.from(files).forEach(file => {
                 if (this.attachments.length >= 5) return;
                 if (file.size > maxSize) {
-                    this.error = `"${file.name}" dépasse la taille maximale de 10 Mo.`;
+                    this.error = `"${file.name}" dépasse la taille maximale de ${@js(\App\Models\TicketAttachment::maxSizeLabel())}.`;
                     return;
                 }
 

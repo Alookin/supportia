@@ -1,8 +1,8 @@
-# SupportIA
+# Zeno
 
 ## Projet
 
-SupportIA est une application SaaS standalone qui permet à des utilisateurs non-techniques (commerciaux, services généraux, etc.) de créer des tickets GLPI en langage naturel. L'IA (API OpenAI, `gpt-5.4-mini` par défaut) classifie automatiquement la demande, suggère une catégorie et une priorité, structure la description, puis crée le ticket dans GLPI via son API REST.
+Zeno (dépôt `supportia`, nom historique du projet) est une application SaaS standalone qui permet à des utilisateurs non-techniques (commerciaux, services généraux, etc.) de créer des tickets GLPI en langage naturel. L'IA (API OpenAI, `gpt-5.4-mini` par défaut) classifie automatiquement la demande, suggère une catégorie et une priorité, structure la description, puis crée le ticket dans GLPI via son API REST.
 
 L'application est multi-tenant : chaque organisation configure sa propre instance GLPI, ses catégories, et ses utilisateurs.
 
@@ -49,6 +49,7 @@ app/
 
 ## Conventions
 
+- Nom du produit : « Zeno » partout où un humain lit (texte, interface, documentation, commentaires). « supportia » est gelé comme identifiant technique existant (dépôt, `config/supportia.php`, variables `SUPPORTIA_*`) : pas de renommage pendant le pilote. Nouveaux identifiants en `ZENO_*` / `zeno:`
 - Langue du code : anglais (noms de classes, méthodes, variables)
 - Langue du contenu/UI : français
 - Toutes les dates en UTC, affichage en Europe/Paris
@@ -109,7 +110,7 @@ Les variables GLPI sont par organisation (en base), pas dans .env.
 - À la création d'un ticket, recherche automatique des articles pertinents via l'API GLPI (GET /KnowbaseItem) par mots-clés et catégorie
 - Analyse sémantique par l'IA pour trouver l'article le plus pertinent (pas juste par catégorie mais par similarité avec la description)
 - Articles suggérés attachés au ticket → le technicien voit la solution immédiatement
-- Génération automatique d'articles : quand un technicien résout un ticket, SupportIA propose de transformer la solution en article de base de connaissances
+- Génération automatique d'articles : quand un technicien résout un ticket, Zeno propose de transformer la solution en article de base de connaissances
 
 ### V3 — Multi-tenant & SaaS
 - Onboarding self-service pour de nouvelles organisations

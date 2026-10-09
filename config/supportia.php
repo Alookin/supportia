@@ -63,8 +63,7 @@ return [
     |--------------------------------------------------------------------------
     */
     'glpi_ticket_type' => 1, // 1 = Incident, 2 = Demande
-    'glpi_retry_attempts' => 3,
-    'glpi_retry_delay' => 300, // secondes entre chaque retry
+    // Reprise des envois en échec : job CreateGlpiTicket ($tries, backoff), pas de réglage ici
     'glpi_verify_ssl' => env('GLPI_VERIFY_SSL', true),
 
     // Mode simulation (tests en local) : aucune écriture dans GLPI. Les créations de tickets,
@@ -90,11 +89,16 @@ return [
     | Pièces jointes
     |--------------------------------------------------------------------------
     |
-    | Limites et types autorisés pour les uploads (création de tickets et
-    | commentaires). La validation serveur applique les règles Laravel
-    | "mimes:" (extension + magic bytes) ET "mimetypes:" (MIME finfo,
-    | indépendant de l'extension) — la double règle bloque les fichiers
-    | à extension trompeuse (.php renommé en .txt, etc.).
+    | Source unique des limites d'upload, pour la création de tickets ET les
+    | réponses (TicketAttachment::rules()) ainsi que pour les formulaires.
+    | La validation exige l'extension du nom ET le type MIME détecté sur le
+    | contenu (finfo) : la double règle bloque les fichiers à extension
+    | trompeuse (.php renommé en .txt, etc.).
+    |
+    | max_size_kb ne s'applique que si PHP et le serveur web laissent passer
+    | le fichier : upload_max_filesize ≥ cette taille, post_max_size et
+    | client_max_body_size (nginx) ≥ 5 fichiers × cette taille + marge.
+    | Sinon le fichier est refusé avant Laravel.
     |
     */
     'attachments' => [
