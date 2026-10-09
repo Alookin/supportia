@@ -89,11 +89,19 @@ class AIClassifierService
         $prompt = $this->buildPrompt($description, $clientName, $categories);
 
         // Toute autre valeur que « openai » ou « local » retombe sur Claude
-        $provider = match (config('supportia.ai_provider')) {
+        $configured = config('supportia.ai_provider');
+        $provider = match ($configured) {
             'openai' => 'openai',
             'local'  => 'local',
             default  => 'claude',
         };
+        if (! in_array($configured, ['openai', 'claude', 'local'], true)) {
+            // Faute de frappe probable (opneai, Openai…) : sans clé Claude, fallback mots-clés permanent
+            Log::warning('AI_PROVIDER inconnu, repli sur claude', [
+                'ai_provider' => $configured,
+                'admis'       => ['openai', 'claude', 'local'],
+            ]);
+        }
 
         $start = microtime(true);
 

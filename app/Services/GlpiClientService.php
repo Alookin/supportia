@@ -720,7 +720,7 @@ class GlpiClientService
     }
 
     /**
-     * Convertit le markdown minimal généré par Claude en HTML compatible GLPI.
+     * Convertit le markdown minimal produit par le moteur de classification (quel qu'il soit) en HTML compatible GLPI.
      * GLPI attend du HTML ; le markdown brut s'affiche tel quel sans conversion.
      */
     private function markdownToGlpiHtml(string $text): string

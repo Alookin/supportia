@@ -39,8 +39,17 @@ fi
 # Valeur d'une variable du .env (dernière occurrence, guillemets et espaces retirés)
 env_value() { { grep "^$1=" .env || true; } | tail -n 1 | cut -d= -f2- | sed -e 's/[[:space:]]*$//' -e 's/^["'\'']//' -e 's/["'\'']$//'; }
 
-AI_PROVIDER_VALUE="$(env_value AI_PROVIDER)"
-AI_PROVIDER_VALUE="${AI_PROVIDER_VALUE:-openai}"   # même défaut que config/supportia.php
+# Absente : défaut openai, comme config/supportia.php. Présente mais vide : Laravel lit "" et,
+# comme pour toute valeur inconnue, AIClassifierService retombe sur Claude (sans clé : fallback permanent).
+if grep -q '^AI_PROVIDER=' .env; then
+    AI_PROVIDER_VALUE="$(env_value AI_PROVIDER)"
+else
+    AI_PROVIDER_VALUE="openai"
+fi
+case "$AI_PROVIDER_VALUE" in
+    openai|claude|local) ;;
+    *) fail "AI_PROVIDER=\"$AI_PROVIDER_VALUE\" n'est pas une valeur admise (openai, claude ou local, en minuscules) : Zeno retomberait silencieusement sur Claude." ;;
+esac
 if [ "$AI_PROVIDER_VALUE" = "local" ]; then
     fail "AI_PROVIDER=local interdit en production : moteur d'IA hors du périmètre Via-Mobilis, réservé aux démos."
 fi
