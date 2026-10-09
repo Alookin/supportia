@@ -21,10 +21,12 @@
             </div>
             <template x-if="result && result.provider">
                 <span class="ml-auto text-xs px-2 py-1 rounded-md font-semibold"
-                      :class="['openai', 'claude', 'local'].includes(result.provider)
+                      :class="@js(\App\Models\SupportTicket::AI_PROVIDERS).includes(result.provider)
                           ? 'bg-blue-50 text-blue-700'
                           : 'bg-amber-50 text-amber-700'"
-                      x-text="['openai', 'claude', 'local'].includes(result.provider) ? 'Analyse IA' : 'Analyse simplifiée'">
+                      x-text="@js(\App\Models\SupportTicket::AI_PROVIDERS).includes(result.provider)
+                          ? @js(\App\Models\SupportTicket::analysisLabel('openai'))
+                          : @js(\App\Models\SupportTicket::analysisLabel(null))">
                 </span>
             </template>
         </div>

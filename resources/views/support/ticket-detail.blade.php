@@ -13,7 +13,10 @@
             </a>
             <span class="text-gray-300">/</span>
             <h2 class="font-semibold text-xl text-gray-800 leading-tight truncate">
-                {{ $ticket->ai_title ?: 'Ticket #' . $ticket->id }}
+                @if($ticket->displayNumber())
+                    <span class="font-mono text-gray-400">{{ $ticket->displayNumber() }}</span>
+                @endif
+                {{ $ticket->ai_title ?: 'Ticket' }}
             </h2>
         </div>
     </x-slot>
@@ -25,6 +28,9 @@
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div class="min-w-0">
+                        @if($ticket->displayNumber())
+                            <p class="text-sm font-mono font-semibold text-gray-400">Ticket {{ $ticket->displayNumber() }}</p>
+                        @endif
                         <h1 class="text-xl font-bold text-gray-900 leading-snug">
                             {{ $ticket->ai_title ?: $ticket->raw_description }}
                         </h1>
@@ -119,15 +125,15 @@
                     <div>
                         <dt class="text-xs font-semibold uppercase tracking-wider text-gray-400">Classification</dt>
                         <dd class="mt-1">
-                            @if(in_array($ticket->ai_provider, ['openai', 'claude', 'local'], true))
+                            @if($ticket->wasAnalyzedByAi())
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 ring-1 ring-blue-200">
                                     <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                                    Analyse IA
+                                    {{ \App\Models\SupportTicket::analysisLabel($ticket->ai_provider) }}
                                 </span>
                             @elseif($ticket->ai_provider)
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
                                     <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
-                                    Classement simplifié (mots-clés)
+                                    {{ \App\Models\SupportTicket::analysisLabel($ticket->ai_provider) }}
                                 </span>
                             @else
                                 <span class="text-sm text-gray-400">—</span>
@@ -454,10 +460,15 @@
             </div>
 
             {{-- ── Description originale ──────────────────────────── --}}
-            @if($ticket->raw_description)
+            {{-- Masquée quand elle est identique à la description affichée (analyse simplifiée sans retouche) --}}
+            @if($ticket->hasDistinctOriginalDescription())
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                     <h2 class="text-sm font-semibold text-gray-700 mb-1">Description originale</h2>
-                    <p class="text-xs text-gray-400 mb-4">Texte saisi par le commercial, avant traitement IA</p>
+                    <p class="text-xs text-gray-400 mb-4">
+                        {{ $ticket->wasAnalyzedByAi()
+                            ? 'Texte saisi par le commercial, avant analyse IA'
+                            : 'Texte saisi par le commercial, avant ses modifications' }}
+                    </p>
                     <div class="bg-gray-50 rounded-xl p-4 text-sm text-gray-600 leading-relaxed whitespace-pre-wrap border border-gray-100">{{ $ticket->raw_description }}</div>
                 </div>
             @endif

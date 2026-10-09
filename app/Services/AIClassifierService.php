@@ -355,7 +355,7 @@ PROMPT;
         }
 
         return [
-            'title'         => self::shortTitle(preg_split('/[.?!,]/', trim($description))[0]),
+            'title'         => self::fallbackTitle($description),
             'body'          => $description,
             'category_slug' => $bestSlug,
             'priority'      => 3, // par défaut en mode dégradé
@@ -387,6 +387,61 @@ PROMPT;
         } catch (\Throwable $e) {
             Log::error('Failed to log AI request', ['error' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Titre du fallback : première phrase porteuse d'information, sans les formules de politesse
+     * d'ouverture (« Bonjour Paul, », « J'espère que vous allez bien. », « Je vous contacte car… »).
+     * Sert à chaque incident du moteur d'IA : il doit rester présentable dans les listes.
+     */
+    public static function fallbackTitle(string $description): string
+    {
+        $sentences = preg_split('/(?<=[.!?…])\s+|\R+/u', trim($description), -1, PREG_SPLIT_NO_EMPTY);
+
+        foreach ($sentences as $sentence) {
+            $sentence = self::stripCourtesy($sentence);
+            $words = preg_split('/[\s\p{P}]+/u', $sentence, -1, PREG_SPLIT_NO_EMPTY);
+
+            // « Merci d'avance. », « Petit souci : » … ne suffisent pas à faire un titre
+            if (count(array_filter($words, fn ($w) => mb_strlen($w) >= 3)) >= 3) {
+                return self::shortTitle(self::upperFirst(rtrim($sentence, " \t.;:,!")));
+            }
+        }
+
+        // Rien de mieux : le texte entier, débarrassé des formules d'ouverture
+        $text = self::stripCourtesy(trim(preg_replace('/\s+/u', ' ', $description)));
+
+        return self::shortTitle(self::upperFirst($text !== '' ? $text : trim($description)));
+    }
+
+    /** Retire, en début de phrase, salutations et formules d'introduction (plusieurs à la suite). */
+    private static function stripCourtesy(string $text): string
+    {
+        $greeting = '(?:bonjour|bonsoir|salut|hello|coucou|hey|re)';
+        // Destinataire, seulement s'il est suivi d'une ponctuation : « Bonjour Paul, », « Bonjour à tous ! »
+        // (« Bonjour Transports Duval n'arrive plus… » garde le nom du client)
+        $addressee = "(?:\\s+(?:à|a)?\\s*(?:tous|toutes|vous|tout le monde|l['’]équipe|la team|madame|monsieur|\\p{Lu}[\\p{L}'-]*)){1,3}";
+
+        $patterns = [
+            "/^(?:re|tr|fwd?)\\s*:\\s*/iu",
+            "/^{$greeting}\\b(?:{$addressee}\\s*[,.!?:;]+|\\s*[,.!?:;]*)\\s*/iu",
+            "/^j['’]espère que (?:vous allez|tu vas|tout va) bien\\s*[,.!?:;]*\\s*/iu",
+            "/^(?:désolée?|pardon) de (?:vous|te) déranger\\s*[,.!?:;]*\\s*/iu",
+            "/^(?:je me permets de (?:vous|te) (?:contacter|écrire|solliciter)|je (?:vous|te) (?:contacte|écris|sollicite))(?:\\s+(?:car|parce que|pour|concernant|au sujet de|à propos de))?\\s*[,.!?:;]*\\s*/iu",
+            "/^(?:petite question|petit souci|petit problème|une question)\\s*[,.!?:;]+\\s*/iu",
+        ];
+
+        do {
+            $before = $text;
+            $text = trim(preg_replace($patterns, '', $text));
+        } while ($text !== $before && $text !== '');
+
+        return $text;
+    }
+
+    private static function upperFirst(string $text): string
+    {
+        return mb_strtoupper(mb_substr($text, 0, 1)) . mb_substr($text, 1);
     }
 
     /** Titre ≤ 80 caractères, coupé sur un mot entier, avec « … » si tronqué. */
