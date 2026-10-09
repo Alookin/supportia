@@ -31,7 +31,8 @@ Zeno supprime cette friction : l'utilisateur décrit le problème comme dans un 
 - **Validation par l'utilisateur** : sous le seuil de confiance (0,7 par défaut), l'utilisateur relit et corrige la proposition (titre, catégorie, priorité, description) avant l'envoi, ou l'annule. Au-dessus du seuil, le ticket part directement.
 - **Fallback par mots-clés** : si le moteur échoue (clé absente, HTTP, timeout, réponse illisible), Zeno classe par mots-clés. La confiance qui en résulte (0,35 au plus) est sous le seuil par défaut : l'utilisateur valide donc la proposition. L'interface l'affiche comme « Analyse simplifiée », et non « Analyse IA ».
 - **Plusieurs clients par ticket** : identifiant et nom, jusqu'à 10. Zeno signale les tickets ouverts sur le même client dans les 30 derniers jours, pour éviter les doublons.
-- **Pièces jointes** : jusqu'à 5 fichiers de 10 Mo (images, PDF, CSV, TXT, LOG). Elles sont stockées hors de `public/`, servies par une route authentifiée, et envoyées dans GLPI comme documents du ticket.
+- **Pièces jointes** : jusqu'à 5 fichiers par ticket et 1 par réponse, 10 Mo chacun (`SUPPORTIA_ATTACHMENT_MAX_KB`). Formats : images (jpg, png, gif, webp), PDF, CSV, TXT, LOG, Excel (xls, xlsx). Les limites et les formats viennent de `config/supportia.php` (`attachments`), seule source pour la validation et les formulaires. Les fichiers sont stockés hors de `public/`, servis par une route authentifiée, et ceux joints à la création sont envoyés dans GLPI comme documents du ticket.
+  > **Pour que la limite de 10 Mo soit réelle**, le serveur doit laisser passer les fichiers, sinon ils sont refusés avant Zeno : `upload_max_filesize = 10M` et `post_max_size = 52M` (5 fichiers de 10 Mo et le formulaire) dans PHP, et `client_max_body_size 52m;` dans nginx (défaut : 1 Mo, au-delà duquel nginx répond 413 avant PHP).
 - **Catégories par équipe** : une catégorie rattachée à une ou plusieurs équipes n'est proposée qu'à leurs membres. Les autres catégories sont proposées à tous.
 
 ### Intégration GLPI
@@ -211,6 +212,7 @@ Les variables Laravel standard (`APP_*`, `DB_*`, `MAIL_*`, `SESSION_*`, `LOG_*`�
 | `SUPPORTIA_AI_TIMEOUT` | `25` | Timeout en secondes, moteurs `claude` et `local` uniquement |
 | `SUPPORTIA_CONFIDENCE_THRESHOLD` | `0.7` | En dessous, l'utilisateur valide la proposition avant l'envoi |
 | `SUPPORTIA_GLPI_TIMEOUT` | `15` | Timeout des appels GLPI, en secondes |
+| `SUPPORTIA_ATTACHMENT_MAX_KB` | `10240` | Taille max d'une pièce jointe, en Ko (création et réponses). Effective seulement si `upload_max_filesize`, `post_max_size` et `client_max_body_size` la laissent passer (voir [Déploiement](#déploiement)) |
 | `GLPI_VERIFY_SSL` | `true` | `false` pour un GLPI de test en certificat auto-signé |
 | `GLPI_DRY_RUN` | `false` | Mode simulation GLPI, ignoré en production |
 | `ZENO_NOTIFY_RESOLVED` | `true` | Email au demandeur quand GLPI résout son ticket |
@@ -286,7 +288,7 @@ Statuts d'un ticket : `needs_review`, `queued`, `created`, `failed`, `resolved`,
 
 - **Secrets** : les clés d'API sont dans `.env` et ne sont jamais envoyées au navigateur. Les jetons GLPI et la clé Claude propre à une organisation sont chiffrés en base (cast `encrypted`, clé `APP_KEY`).
 - **Accès** : toutes les pages de l'application exigent une connexion et une organisation active. Seules la connexion, la réinitialisation du mot de passe et `/up` sont publiques. La visibilité d'un ticket dépend du rôle (voir [Rôles et équipes](#rôles-et-équipes)). La création et la validation de tickets sont limitées à 20 requêtes par minute.
-- **Pièces jointes** : elles sont stockées hors de `public/`, contrôlées par type MIME et servies uniquement aux utilisateurs qui voient le ticket. Chaque téléchargement est journalisé. Les fichiers sont supprimés avec le ticket, quand une proposition est annulée ou purgée.
+- **Pièces jointes** : elles sont stockées hors de `public/`, contrôlées à la fois sur l'extension du nom et sur le type MIME détecté dans le contenu (un script renommé en `.txt` est refusé), et servies uniquement aux utilisateurs qui voient le ticket. Chaque téléchargement est journalisé. Les fichiers sont supprimés avec le ticket, quand une proposition est annulée ou purgée.
 - **Données envoyées à un tiers** : le fournisseur du moteur d'IA (OpenAI par défaut) reçoit le texte de la demande et la liste des catégories. Les pièces jointes ne lui sont pas transmises.
 - **Production** : `scripts/deploy.sh` refuse `APP_DEBUG=true`, `GLPI_DRY_RUN=true`, `AI_PROVIDER=local` et une `OPENAI_API_KEY` vide.
 - `SECURITY_AUDIT.md` : audit des secrets dans l'historique git (mai 2026).
@@ -302,6 +304,16 @@ La cible est un serveur Debian 12 avec nginx et php-fpm.
 
 Après le premier déploiement, ajouter l'entrée cron `* * * * * php artisan schedule:run` et **sauvegarder `APP_KEY`**, car elle déchiffre les jetons GLPI stockés en base.
 
+Réglages serveur nécessaires pour les pièces jointes de 10 Mo (`SUPPORTIA_ATTACHMENT_MAX_KB=10240`). `deploy.sh` ne les vérifie pas :
+
+| Où | Réglage | Pourquoi |
+|---|---|---|
+| php-fpm (`php.ini`) | `upload_max_filesize = 10M` | Sinon PHP rejette le fichier : « Le fichier n'a pas pu être reçu » |
+| php-fpm (`php.ini`) | `post_max_size = 52M` | Une création peut contenir 5 fichiers de 10 Mo. Sinon : erreur 413 |
+| nginx | `client_max_body_size 52m;` | Le défaut est 1 Mo : au-delà, nginx répond 413 avant PHP |
+
+Pour une autre limite, ajuster les trois valeurs : la limite PHP par fichier égale à la limite de Zeno, et le corps de requête au moins égal à 5 fois cette limite plus une marge.
+
 ---
 
 ## Roadmap
@@ -311,7 +323,7 @@ Mise en service auprès des équipes commerciale et marketing de Via-Mobilis, su
 
 ### À venir (rien de ce qui suit n'existe encore dans le code)
 
-1. **Suggestions de solutions alimentées par l'historique GLPI (RAG)** : conçu, non implémenté. Le principe : à la création d'un ticket, retrouver les tickets résolus similaires et leurs solutions pour aider l'utilisateur et le technicien. Seule brique déjà présente : l'export de l'historique (`glpi:export-tickets`).
+1. **Suggestions de solutions alimentées par l'historique GLPI (RAG)** : conçu dans les notes de projet (hors dépôt), non implémenté. Le principe : à la création d'un ticket, retrouver les tickets résolus similaires et leurs solutions pour aider l'utilisateur et le technicien. Seule brique déjà présente : l'export de l'historique (`glpi:export-tickets`).
 2. **Version SaaS multi-tenant** : onboarding self-service des organisations, administration de la configuration GLPI et des catégories dans l'interface, branding par organisation, facturation à la consommation, connecteurs vers d'autres outils ITSM.
 
 ---
