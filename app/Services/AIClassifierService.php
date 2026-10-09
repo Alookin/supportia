@@ -7,6 +7,8 @@ use App\Models\AiRequestLog;
 use App\Models\GlpiCategoryMap;
 use App\Models\Organization;
 use App\Models\SupportTicket;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -93,8 +95,9 @@ class AIClassifierService
             default  => 'claude',
         };
 
+        $start = microtime(true);
+
         try {
-            $start = microtime(true);
             $result = match ($provider) {
                 'openai' => $this->callOpenAi($prompt),
                 'local'  => $this->callLocal($prompt),
@@ -103,7 +106,12 @@ class AIClassifierService
             $latencyMs = (int) ((microtime(true) - $start) * 1000);
 
             $result['provider'] = $provider;
-            $result['_meta']    = ['latency_ms' => $latencyMs, 'error' => null] + ($result['_meta'] ?? []);
+            $result['_meta']    = [
+                'latency_ms'         => $latencyMs,
+                'error'              => null,
+                'attempted_provider' => $provider,
+                'attempted_model'    => $result['_meta']['model'] ?? null,
+            ] + ($result['_meta'] ?? []);
 
             if ($ticket) {
                 $this->logFor($ticket, $result);
@@ -121,7 +129,14 @@ class AIClassifierService
             }
 
             $result = $this->fallbackClassify($description, $categories);
-            $result['_meta'] = ['latency_ms' => 0, 'error' => mb_substr($e->getMessage(), 0, 1000)];
+            $result['_meta'] = [
+                // Durée réelle de la tentative (un timeout coûte ses secondes au commercial)
+                'latency_ms'         => (int) ((microtime(true) - $start) * 1000),
+                'error'              => mb_substr($e->getMessage(), 0, 1000),
+                'attempted_provider' => $provider,
+                'attempted_model'    => $this->configuredModel($provider),
+                'fallback_reason'    => self::fallbackReason($e),
+            ];
 
             if ($ticket) {
                 $this->logFor($ticket, $result);
@@ -210,10 +225,8 @@ PROMPT;
         $data = $response->json();
 
         return $this->parseClassification($data['content'][0]['text'] ?? '', [
-            'model'             => (string) config('supportia.claude_model'),
-            'prompt_tokens'     => $data['usage']['input_tokens'] ?? null,
-            'completion_tokens' => $data['usage']['output_tokens'] ?? null,
-        ]);
+            'model' => (string) config('supportia.claude_model'),
+        ] + self::anthropicUsage($data['usage'] ?? null));
     }
 
     /**
@@ -252,9 +265,7 @@ PROMPT;
 
         return $this->parseClassification($data['choices'][0]['message']['content'] ?? '', [
             'model'             => (string) $model,
-            'prompt_tokens'     => $data['usage']['prompt_tokens'] ?? null,
-            'completion_tokens' => $data['usage']['completion_tokens'] ?? null,
-        ]);
+        ] + self::openAiUsage($data['usage'] ?? null));
     }
 
     /**
@@ -300,9 +311,87 @@ PROMPT;
 
         return $this->parseClassification($data['choices'][0]['message']['content'] ?? '', [
             'model'             => $model,
-            'prompt_tokens'     => $data['usage']['prompt_tokens'] ?? null,
-            'completion_tokens' => $data['usage']['completion_tokens'] ?? null,
-        ]);
+        ] + self::openAiUsage($data['usage'] ?? null));
+    }
+
+    /** Modèle configuré pour un moteur (celui qui a été tenté, en cas de fallback). */
+    private function configuredModel(string $provider): ?string
+    {
+        return match ($provider) {
+            'openai' => config('supportia.openai.model'),
+            'local'  => config('supportia.local_ai.model'),
+            default  => config('supportia.claude_model'),
+        };
+    }
+
+    /**
+     * Bloc usage au format OpenAI (Chat Completions : openai et local).
+     * prompt_tokens inclut les tokens servis depuis le cache.
+     */
+    private static function openAiUsage(?array $usage): array
+    {
+        if (! $usage) {
+            return ['prompt_tokens' => null, 'completion_tokens' => null];
+        }
+
+        $prompt     = $usage['prompt_tokens'] ?? null;
+        $completion = $usage['completion_tokens'] ?? null;
+
+        return [
+            'prompt_tokens'     => $prompt,
+            'completion_tokens' => $completion,
+            'total_tokens'      => $usage['total_tokens'] ?? ($prompt !== null && $completion !== null ? $prompt + $completion : null),
+            'cached_tokens'     => $usage['prompt_tokens_details']['cached_tokens'] ?? null,
+            'reasoning_tokens'  => $usage['completion_tokens_details']['reasoning_tokens'] ?? null,
+            'usage_raw'         => $usage,
+        ];
+    }
+
+    /**
+     * Bloc usage au format Anthropic, ramené à la convention OpenAI :
+     * prompt_tokens = entrée totale, cache compris (input_tokens n'inclut pas les lectures de cache).
+     */
+    private static function anthropicUsage(?array $usage): array
+    {
+        if (! $usage) {
+            return ['prompt_tokens' => null, 'completion_tokens' => null];
+        }
+
+        $cached     = $usage['cache_read_input_tokens'] ?? 0;
+        $prompt     = isset($usage['input_tokens'])
+            ? $usage['input_tokens'] + $cached + ($usage['cache_creation_input_tokens'] ?? 0)
+            : null;
+        $completion = $usage['output_tokens'] ?? null;
+
+        return [
+            'prompt_tokens'     => $prompt,
+            'completion_tokens' => $completion,
+            'total_tokens'      => $prompt !== null && $completion !== null ? $prompt + $completion : null,
+            'cached_tokens'     => $cached,
+            'usage_raw'         => $usage,
+        ];
+    }
+
+    /**
+     * Cause normalisée d'un fallback (ai_request_logs.fallback_reason), pour les comptages SQL.
+     */
+    private static function fallbackReason(\Throwable $e): string
+    {
+        return match (true) {
+            $e instanceof AiProviderIncidentException => match ($e->incident) {
+                AiProviderIncidentException::OPENAI_KEY_MISSING    => 'key_missing',
+                AiProviderIncidentException::OPENAI_KEY_REJECTED   => 'key_rejected',
+                AiProviderIncidentException::OPENAI_QUOTA_EXCEEDED => 'quota_exceeded',
+                default                                            => 'other',
+            },
+            $e instanceof ConnectionException => preg_match('/timed out|cURL error 28/i', $e->getMessage())
+                ? 'timeout'
+                : 'connection_error',
+            $e instanceof RequestException    => 'http_error',
+            $e instanceof \JsonException,
+            str_starts_with($e->getMessage(), 'Impossible de parser') => 'invalid_response',
+            default => 'other',
+        };
     }
 
     /**
@@ -375,14 +464,31 @@ PROMPT;
 
         try {
             AiRequestLog::create([
-                'support_ticket_id' => $ticket->id,
-                'provider'          => $classification['provider'] ?? 'unknown',
-                'model'             => $meta['model'] ?? 'keywords',
-                'prompt_tokens'     => $meta['prompt_tokens'] ?? null,
-                'completion_tokens' => $meta['completion_tokens'] ?? null,
-                'latency_ms'        => $meta['latency_ms'] ?? 0,
-                'raw_response'      => $classification,
-                'error'             => $meta['error'] ?? null,
+                'support_ticket_id'  => $ticket->id,
+                // Recopiés : l'attribution survit à la suppression du ticket (brouillon annulé ou purgé)
+                'organization_id'    => $ticket->organization_id,
+                'user_id'            => $ticket->user_id,
+                'team_id'            => $ticket->team_id,
+                'provider'           => $classification['provider'] ?? 'unknown',
+                'model'              => $meta['model'] ?? 'keywords',
+                'attempted_provider' => $meta['attempted_provider'] ?? null,
+                'attempted_model'    => $meta['attempted_model'] ?? null,
+                'fallback_reason'    => $meta['fallback_reason'] ?? null,
+                'prompt_tokens'      => $meta['prompt_tokens'] ?? null,
+                'completion_tokens'  => $meta['completion_tokens'] ?? null,
+                'total_tokens'       => $meta['total_tokens'] ?? null,
+                'cached_tokens'      => $meta['cached_tokens'] ?? null,
+                'reasoning_tokens'   => $meta['reasoning_tokens'] ?? null,
+                'usage_raw'          => $meta['usage_raw'] ?? null,
+                'estimated_cost'     => AiPricing::estimate(
+                    $meta['model'] ?? null,
+                    $meta['prompt_tokens'] ?? null,
+                    $meta['completion_tokens'] ?? null,
+                    $meta['cached_tokens'] ?? null,
+                ),
+                'latency_ms'         => $meta['latency_ms'] ?? 0,
+                'raw_response'       => $classification,
+                'error'              => $meta['error'] ?? null,
             ]);
         } catch (\Throwable $e) {
             Log::error('Failed to log AI request', ['error' => $e->getMessage()]);
