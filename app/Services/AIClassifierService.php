@@ -206,7 +206,7 @@ PROMPT;
             throw new \RuntimeException('Aucune clé Claude API configurée');
         }
 
-        $response = Http::timeout(config('supportia.ai_timeout', 5))
+        $response = Http::timeout(config('supportia.ai_timeout', 25))
             ->when(! config('supportia.claude_verify_ssl', true), fn ($h) => $h->withoutVerifying())
             ->withHeaders([
                 'x-api-key'         => $apiKey,

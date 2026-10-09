@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Enums\TicketStatus;
 use App\Models\SupportTicket;
+use App\Models\TicketAttachment;
 use App\Services\AIClassifierService;
 use App\Services\GlpiTicketPublisher;
 use Illuminate\Http\JsonResponse;
@@ -15,14 +16,6 @@ use Illuminate\Support\Str;
 
 class SupportTicketController extends Controller
 {
-    // Types MIME autorisés pour les pièces jointes
-    private const ALLOWED_MIMES = [
-        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-        'application/pdf',
-        'text/csv', 'text/plain', 'text/x-log',
-        'application/vnd.ms-excel',
-    ];
-
     public function __construct(
         private AIClassifierService $classifier,
         private GlpiTicketPublisher $publisher,
@@ -47,17 +40,8 @@ class SupportTicketController extends Controller
                 }
             }],
             'attachments'   => 'nullable|array|max:5',
-            'attachments.*' => [
-                'nullable',
-                'file',
-                'max:10240', // 10 Mo par fichier
-                function ($attribute, $value, $fail) {
-                    if ($value && ! in_array($value->getMimeType(), self::ALLOWED_MIMES, true)) {
-                        $fail("Type de fichier non autorisé. Formats acceptés : images, PDF, CSV, TXT, LOG.");
-                    }
-                },
-            ],
-        ]);
+            'attachments.*' => ['nullable', ...TicketAttachment::rules()],
+        ], TicketAttachment::messages('attachments.*'));
 
         $user = $request->user();
         $organization = $user->organization;

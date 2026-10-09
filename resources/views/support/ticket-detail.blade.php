@@ -424,7 +424,7 @@
                                    name="attachment"
                                    id="msg_file"
                                    x-ref="fileInput"
-                                   accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.csv,.txt,.log"
+                                   accept="{{ \App\Models\TicketAttachment::acceptAttribute() }}"
                                    class="hidden"
                                    @change="fileName = $event.target.files[0]?.name ?? ''">
 

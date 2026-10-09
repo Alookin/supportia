@@ -229,9 +229,8 @@ class SupportDashboardController extends Controller
 
         $request->validate([
             'content'    => ['nullable', 'string', 'max:2000'],
-            'attachment' => ['nullable', 'file', 'max:10240',
-                             'mimes:jpg,jpeg,png,gif,webp,pdf,csv,txt,log'],
-        ]);
+            'attachment' => ['nullable', ...TicketAttachment::rules()],
+        ], TicketAttachment::messages('attachment'));
 
         $hasFile = $request->hasFile('attachment');
         $content = trim($request->content ?? '');
