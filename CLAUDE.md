@@ -111,7 +111,7 @@ npm run build && php artisan test               # le build Vite doit précéder 
 Indispensables :
 
 ```
-AI_PROVIDER=openai                 # défaut ; claude ou local possibles (local interdit en production)
+AI_PROVIDER=openai                 # défaut ; claude ou local possibles (local interdit en production). Toute autre valeur, y compris vide : repli sur claude + warning, et deploy.sh refuse
 OPENAI_API_KEY=                    # obligatoire avec openai (deploy.sh refuse une clé vide)
 OPENAI_MODEL=gpt-5.4-mini
 OPENAI_TIMEOUT=10                  # secondes, moteur openai uniquement

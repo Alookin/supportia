@@ -77,7 +77,7 @@ Chaque organisation a sa propre instance GLPI (URL et jetons chiffrés en base),
 | `claude` | API Anthropic, `claude-sonnet-4-20250514` | `SUPPORTIA_AI_TIMEOUT`, 25 s |
 | `local` | Serveur auto-hébergé compatible OpenAI (Ollama, LM Studio). **Interdit en production** | `SUPPORTIA_AI_TIMEOUT`, 25 s |
 
-Quel que soit le moteur, un échec bascule sur le fallback par mots-clés. Avec OpenAI, une clé absente, refusée (401) ou un quota épuisé (429) est journalisé au niveau `error`, avec un préfixe dans `ai_request_logs.error` : `[OPENAI_KEY_MISSING]`, `[OPENAI_KEY_REJECTED]` ou `[OPENAI_QUOTA_EXCEEDED]`.
+Quel que soit le moteur, un échec bascule sur le fallback par mots-clés. Une valeur inconnue d'`AI_PROVIDER` (faute de frappe, majuscule, valeur vide) retombe sur `claude` et est journalisée en `warning` (« AI_PROVIDER inconnu, repli sur claude »). Avec OpenAI, une clé absente, refusée (401) ou un quota épuisé (429) est journalisé au niveau `error`, avec un préfixe dans `ai_request_logs.error` : `[OPENAI_KEY_MISSING]`, `[OPENAI_KEY_REJECTED]` ou `[OPENAI_QUOTA_EXCEEDED]`.
 
 ### Coût mesuré
 
@@ -290,7 +290,7 @@ Statuts d'un ticket : `needs_review`, `queued`, `created`, `failed`, `resolved`,
 - **Accès** : toutes les pages de l'application exigent une connexion et une organisation active. Seules la connexion, la réinitialisation du mot de passe et `/up` sont publiques. La visibilité d'un ticket dépend du rôle (voir [Rôles et équipes](#rôles-et-équipes)). La création et la validation de tickets sont limitées à 20 requêtes par minute.
 - **Pièces jointes** : elles sont stockées hors de `public/`, contrôlées à la fois sur l'extension du nom et sur le type MIME détecté dans le contenu (un script renommé en `.txt` est refusé), et servies uniquement aux utilisateurs qui voient le ticket. Chaque téléchargement est journalisé. Les fichiers sont supprimés avec le ticket, quand une proposition est annulée ou purgée.
 - **Données envoyées à un tiers** : le fournisseur du moteur d'IA (OpenAI par défaut) reçoit le texte de la demande et la liste des catégories. Les pièces jointes ne lui sont pas transmises.
-- **Production** : `scripts/deploy.sh` refuse `APP_DEBUG=true`, `GLPI_DRY_RUN=true`, `AI_PROVIDER=local` et une `OPENAI_API_KEY` vide.
+- **Production** : `scripts/deploy.sh` refuse `APP_DEBUG=true`, `GLPI_DRY_RUN=true`, `AI_PROVIDER=local`, une valeur d'`AI_PROVIDER` autre que `openai`, `claude` ou `local` (y compris vide), et une `OPENAI_API_KEY` vide.
 - `SECURITY_AUDIT.md` : audit des secrets dans l'historique git (mai 2026).
 
 ---
