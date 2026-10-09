@@ -22,7 +22,7 @@ class SupportTicketController extends Controller
     ) {}
 
     /**
-     * POST /api/tickets
+     * POST /support/tickets
      *
      * Flux principal : description → IA → GLPI
      */
@@ -147,7 +147,7 @@ class SupportTicketController extends Controller
     }
 
     /**
-     * POST /api/tickets/{ticket}/confirm
+     * POST /support/tickets/{ticket}/confirm
      *
      * Validation manuelle d'un ticket en needs_review
      * (le commercial peut modifier titre, catégorie, priorité, corps).
@@ -253,7 +253,7 @@ class SupportTicketController extends Controller
     }
 
     /**
-     * GET /api/tickets
+     * GET /support/tickets
      *
      * Liste les tickets récents du commercial connecté.
      */
